@@ -1,7 +1,5 @@
 import crypto from "crypto";
-import { UserModel } from "../models/User.js";
 import { memoryStore } from "../data/memoryStore.js";
-import { isDatabaseConnected } from "../config/db.js";
 
 function toPublicUser(user) {
   const inventoryValue = (user.inventory || []).reduce(
@@ -33,21 +31,6 @@ function buildSeededUser(discordId, username = "Guest Dropper") {
 }
 
 export async function getOrCreateUser({ discordId, username, avatar }) {
-  if (isDatabaseConnected()) {
-    let user = await UserModel.findOne({ discordId });
-    if (!user) {
-      user = await UserModel.create({
-        discordId,
-        username,
-        avatar,
-        balance: 250,
-        inventory: []
-      });
-    }
-
-    return toPublicUser(user.toObject());
-  }
-
   if (!memoryStore.users.has(discordId)) {
     memoryStore.users.set(
       discordId,
@@ -66,34 +49,12 @@ export async function getOrCreateUser({ discordId, username, avatar }) {
 }
 
 export async function getUserById(discordId) {
-  if (isDatabaseConnected()) {
-    const user = await UserModel.findOne({ discordId });
-    return user ? toPublicUser(user.toObject()) : null;
-  }
-
   const user = memoryStore.users.get(discordId);
   return user ? toPublicUser(user) : null;
 }
 
 export async function saveUser(user) {
   const userId = user.id || user.discordId;
-
-  if (isDatabaseConnected()) {
-    await UserModel.updateOne(
-      { discordId: userId },
-      {
-        discordId: userId,
-        username: user.username,
-        avatar: user.avatar,
-        balance: user.balance,
-        inventory: user.inventory,
-        lastFreeCaseAt: user.lastFreeCaseAt
-      },
-      { upsert: true }
-    );
-
-    return getUserById(userId);
-  }
 
   memoryStore.users.set(userId, {
     discordId: userId,
@@ -131,14 +92,6 @@ export function createSessionToken() {
 }
 
 export async function getLeaderboard() {
-  if (isDatabaseConnected()) {
-    const users = await UserModel.find({}).lean();
-    return users
-      .map(toPublicUser)
-      .sort((a, b) => b.totalInventoryValue - a.totalInventoryValue)
-      .slice(0, 10);
-  }
-
   return [...memoryStore.users.values()]
     .map(toPublicUser)
     .sort((a, b) => b.totalInventoryValue - a.totalInventoryValue)

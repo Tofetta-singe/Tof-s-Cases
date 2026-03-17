@@ -1,5 +1,3 @@
-import { BattleModel } from "../models/Battle.js";
-import { isDatabaseConnected } from "../config/db.js";
 import { memoryStore } from "../data/memoryStore.js";
 import { createId } from "../utils/random.js";
 import { openConfiguredCase } from "./caseService.js";
@@ -24,28 +22,16 @@ export async function createBattle({ host, caseIds, maxPlayers = 2 }) {
     winnerValue: 0
   };
 
-  if (isDatabaseConnected()) {
-    await BattleModel.create(battle);
-  } else {
-    memoryStore.battles.set(battle.roomId, battle);
-  }
+  memoryStore.battles.set(battle.roomId, battle);
 
   return battle;
 }
 
 export async function listBattles() {
-  if (isDatabaseConnected()) {
-    return BattleModel.find({}).sort({ createdAt: -1 }).limit(20).lean();
-  }
-
   return [...memoryStore.battles.values()].reverse();
 }
 
 export async function getBattle(roomId) {
-  if (isDatabaseConnected()) {
-    return BattleModel.findOne({ roomId }).lean();
-  }
-
   return memoryStore.battles.get(roomId) || null;
 }
 
@@ -129,11 +115,5 @@ export async function startBattle(roomId) {
 }
 
 async function persistBattle(battle) {
-  if (isDatabaseConnected()) {
-    await BattleModel.updateOne({ roomId: battle.roomId }, battle, {
-      upsert: true
-    });
-  } else {
-    memoryStore.battles.set(battle.roomId, battle);
-  }
+  memoryStore.battles.set(battle.roomId, battle);
 }

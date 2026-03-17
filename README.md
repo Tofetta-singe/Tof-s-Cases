@@ -7,7 +7,6 @@ Plateforme fullstack inspirée CS avec ouverture de caisses, inventaire, trade-u
 - Frontend: React + Vite + Tailwind CSS + Framer Motion
 - Backend: Node.js + Express + Socket.io
 - Auth: Discord OAuth2
-- DB: MongoDB Atlas via Mongoose
 
 ## Démarrage
 
@@ -37,4 +36,4 @@ npm run dev:client
 
 - `skins.json` à la racine sert de source unique pour les skins et les crates.
 - La logique de tirage, battle et victoire est calculée côté serveur.
-- Si `MONGO_URI` est absent, le projet bascule sur une persistance mémoire utile pour le prototypage local.
+- La persistance actuelle est en mémoire, adaptée au prototypage local.
