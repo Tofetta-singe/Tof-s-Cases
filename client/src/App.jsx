@@ -136,6 +136,7 @@ export default function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [sellingItemId, setSellingItemId] = useState("");
+  const [sellingAll, setSellingAll] = useState(false);
   const [selectedTradeUp, setSelectedTradeUp] = useState([]);
   const [selectedView, setSelectedView] = useState("crates");
   const [volume, setVolume] = useState(() => {
@@ -251,9 +252,12 @@ export default function App() {
       selectedCount: selectedTradeUp.length,
       averageValue: dashboard.user.inventory.length
         ? Number((dashboard.user.totalInventoryValue / dashboard.user.inventory.length).toFixed(2))
-        : 0
+        : 0,
+      totalSellValue: Number(
+        dashboard.user.inventory.reduce((sum, item) => sum + Number(item.sellPrice || 0), 0).toFixed(2)
+      )
     }),
-    [dashboard.user.inventory.length, dashboard.user.totalInventoryValue, selectedTradeUp.length]
+    [dashboard.user.inventory, dashboard.user.totalInventoryValue, selectedTradeUp.length]
   );
 
   const caseColumns = useMemo(() => {
@@ -351,6 +355,29 @@ export default function App() {
     }
   }
 
+  async function sellAllItems() {
+    if (!dashboard.user.inventory.length) {
+      return;
+    }
+
+    setActionError("");
+    setSellingAll(true);
+
+    try {
+      await api("/inventory/sell-all", {
+        method: "POST"
+      });
+      setSelectedTradeUp([]);
+      setOpening(null);
+      setRefreshKey((value) => value + 1);
+    } catch (requestError) {
+      setActionError(requestError.message);
+    } finally {
+      setSellingAll(false);
+      setIsBusy(false);
+    }
+  }
+
   async function loginWithDiscord() {
     const { url } = await fetch(getAuthUrl()).then(async (response) => {
       const payload = await response.json();
@@ -387,75 +414,99 @@ export default function App() {
   return (
     <div className="min-h-screen text-white">
       <div className="mx-auto max-w-[1440px] px-4 py-4 md:px-6">
-        <header className="flex flex-col items-center gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="cs-top-box flex min-w-[206px] flex-col items-center rounded-[12px] border border-[#4e5258] px-6 py-3">
-            <p className="text-[30px] font-bold leading-none text-[#7fe06a]">
-              {currency(dashboard.user.balance)}
-            </p>
-            <p className="text-[19px] font-bold leading-none text-[#78ff63]">Wallet</p>
-          </div>
-
-          <nav className="flex flex-wrap items-center justify-center gap-3">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const active = selectedView === item.id;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setSelectedView(item.id)}
-                  className={`cs-top-box flex w-[112px] flex-col items-center rounded-[12px] border px-3 py-2 transition ${
-                    active ? "border-[#d1d4da] bg-[rgba(103,108,115,0.96)]" : "border-[#4e5258]"
-                  }`}
-                >
-                  <Icon />
-                  <span className="mt-1 text-[14px] font-bold leading-none text-white">{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-
-          <div className="cs-top-box flex min-w-[206px] flex-col items-center rounded-[12px] border border-[#4e5258] px-6 py-3">
-            <p className="text-[30px] font-bold leading-none text-[#9ac8f0]">{currency(totalNetWorth)}</p>
-            <p className="text-[19px] font-bold leading-none text-[#7cc3ff]">Net Worth</p>
-          </div>
-        </header>
-
-        <div className="mt-4 flex justify-center xl:justify-end">
-          <div className="cs-top-box flex w-full max-w-[420px] items-center justify-between gap-4 rounded-[12px] border border-[#4e5258] px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-300">Account</p>
-              <p className="truncate text-lg font-semibold text-white">
-                {authStatus.authenticated ? dashboard.user.username : "Demo Mode"}
-              </p>
+        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+            <div className="cs-panel rounded-[18px] p-4">
+              <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Live Feed</p>
+              <p className="mt-2 text-sm text-slate-300">Tous les skins ouverts en direct.</p>
+              <div className="mt-4 max-h-[70vh] overflow-y-auto pr-1">
+                <LiveFeed
+                  feed={
+                    dashboard.feed.length
+                      ? dashboard.feed
+                      : [
+                          {
+                            id: "seed-1",
+                            username: "Tof",
+                            reward: { name: "Karambit | Doppler", price: 1420 }
+                          }
+                        ]
+                  }
+                />
+              </div>
             </div>
-            {authStatus.authenticated ? (
-              <button
-                type="button"
-                onClick={logout}
-                className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-4 py-2 text-sm font-semibold text-[#88ff7b]"
-              >
-                Logout
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={loginWithDiscord}
-                disabled={!authStatus.discordEnabled || authStatus.loading}
-                className="rounded-[10px] border border-[#7289da] bg-[linear-gradient(180deg,#596fd8_0%,#4258be_100%)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {authStatus.loading
-                  ? "Checking..."
-                  : authStatus.discordEnabled
-                    ? "Login with Discord"
-                    : "Discord Unavailable"}
-              </button>
-            )}
-          </div>
-        </div>
+          </aside>
 
-        <div className="mt-5">
+          <main className="min-w-0">
+            <header className="flex flex-col items-center gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="cs-top-box flex min-w-[206px] flex-col items-center rounded-[12px] border border-[#4e5258] px-6 py-3">
+                <p className="text-[30px] font-bold leading-none text-[#7fe06a]">
+                  {currency(dashboard.user.balance)}
+                </p>
+                <p className="text-[19px] font-bold leading-none text-[#78ff63]">Wallet</p>
+              </div>
+
+              <nav className="flex flex-wrap items-center justify-center gap-3">
+                {NAV_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const active = selectedView === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedView(item.id)}
+                      className={`cs-top-box flex w-[112px] flex-col items-center rounded-[12px] border px-3 py-2 transition ${
+                        active ? "border-[#d1d4da] bg-[rgba(103,108,115,0.96)]" : "border-[#4e5258]"
+                      }`}
+                    >
+                      <Icon />
+                      <span className="mt-1 text-[14px] font-bold leading-none text-white">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="cs-top-box flex min-w-[206px] flex-col items-center rounded-[12px] border border-[#4e5258] px-6 py-3">
+                <p className="text-[30px] font-bold leading-none text-[#9ac8f0]">{currency(totalNetWorth)}</p>
+                <p className="text-[19px] font-bold leading-none text-[#7cc3ff]">Net Worth</p>
+              </div>
+            </header>
+
+            <div className="mt-4 flex justify-center xl:justify-end">
+              <div className="cs-top-box flex w-full max-w-[420px] items-center justify-between gap-4 rounded-[12px] border border-[#4e5258] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-300">Account</p>
+                  <p className="truncate text-lg font-semibold text-white">
+                    {authStatus.authenticated ? dashboard.user.username : "Demo Mode"}
+                  </p>
+                </div>
+                {authStatus.authenticated ? (
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-4 py-2 text-sm font-semibold text-[#88ff7b]"
+                  >
+                    Logout
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={loginWithDiscord}
+                    disabled={!authStatus.discordEnabled || authStatus.loading}
+                    className="rounded-[10px] border border-[#7289da] bg-[linear-gradient(180deg,#596fd8_0%,#4258be_100%)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {authStatus.loading
+                      ? "Checking..."
+                      : authStatus.discordEnabled
+                        ? "Login with Discord"
+                        : "Discord Unavailable"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5">
           {actionError ? (
             <div className="mb-4 rounded-[10px] border border-red-300/25 bg-red-500/12 px-4 py-3 text-base text-red-100">
               {actionError}
@@ -470,9 +521,9 @@ export default function App() {
             onSellReward={sellItem}
             onReroll={rerollCase}
           />
-        </div>
+            </div>
 
-        {selectedView === "crates" ? (
+            {selectedView === "crates" ? (
           <section className="mt-6 grid gap-6 xl:grid-cols-3">
             {caseColumns.map((column) => (
               <div key={column.title}>
@@ -495,9 +546,9 @@ export default function App() {
               </div>
             ))}
           </section>
-        ) : null}
+            ) : null}
 
-        {selectedView === "inventory" ? (
+            {selectedView === "inventory" ? (
           <section className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <div className="cs-panel rounded-[18px] p-5">
               <div className="flex items-center justify-between gap-4">
@@ -505,13 +556,22 @@ export default function App() {
                   <h3 className="text-[28px] font-bold uppercase text-white">Inventory</h3>
                   <p className="text-lg text-slate-200">Select 10 skins of the same rarity for a trade-up.</p>
                 </div>
-                <button
-                  onClick={runTradeUp}
-                  disabled={selectedTradeUp.length !== 10 || isBusy}
-                  className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-5 py-2 text-lg font-semibold text-[#88ff7b] disabled:opacity-50"
-                >
-                  Trade Up 10/10
-                </button>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={sellAllItems}
+                    disabled={!dashboard.user.inventory.length || isBusy || sellingAll}
+                    className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#255326_0%,#183517_100%)] px-5 py-2 text-lg font-semibold text-[#88ff7b] disabled:opacity-50"
+                  >
+                    {sellingAll ? "Selling all..." : `Sell all ${currency(inventorySummary.totalSellValue)}`}
+                  </button>
+                  <button
+                    onClick={runTradeUp}
+                    disabled={selectedTradeUp.length !== 10 || isBusy || sellingAll}
+                    className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-5 py-2 text-lg font-semibold text-[#88ff7b] disabled:opacity-50"
+                  >
+                    Trade Up 10/10
+                  </button>
+                </div>
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3">
@@ -601,9 +661,9 @@ export default function App() {
               </div>
             </div>
           </section>
-        ) : null}
+            ) : null}
 
-        {selectedView === "battles" ? (
+            {selectedView === "battles" ? (
           <div className="mt-6">
             <BattlePanel
               battles={dashboard.battles}
@@ -612,28 +672,15 @@ export default function App() {
               onBattleRefresh={() => setRefreshKey((value) => value + 1)}
             />
           </div>
-        ) : null}
+            ) : null}
 
-        {selectedView === "stats" ? (
+            {selectedView === "stats" ? (
           <section className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
             <div className="cs-panel rounded-[18px] p-5">
-              <h3 className="text-[28px] font-bold uppercase text-white">Live Feed</h3>
-              <p className="mt-2 text-sm text-slate-400">Latest skins opened across the site.</p>
-              <div className="mt-4 max-h-[720px] overflow-y-auto pr-1">
-                <LiveFeed
-                  feed={
-                    dashboard.feed.length
-                      ? dashboard.feed
-                      : [
-                          {
-                            id: "seed-1",
-                            username: "Tof",
-                            reward: { name: "Karambit | Doppler", price: 1420 }
-                          }
-                        ]
-                  }
-                />
-              </div>
+              <h3 className="text-[28px] font-bold uppercase text-white">Feed Summary</h3>
+              <p className="mt-3 text-lg text-slate-200">
+                Le live feed reste visible en permanence dans la colonne de gauche.
+              </p>
             </div>
 
             <div className="space-y-6">
@@ -696,9 +743,9 @@ export default function App() {
               </div>
             </div>
           </section>
-        ) : null}
+            ) : null}
 
-        {selectedView === "settings" ? (
+            {selectedView === "settings" ? (
           <div className="mt-6">
             <SettingsPanel
               authStatus={authStatus}
@@ -709,7 +756,9 @@ export default function App() {
               setVolume={setVolume}
             />
           </div>
-        ) : null}
+            ) : null}
+          </main>
+        </div>
       </div>
     </div>
   );

@@ -87,6 +87,22 @@ export async function removeInventoryItems(discordId, itemIds) {
   return saveUser(user);
 }
 
+export async function clearInventory(discordId) {
+  const user = await getUserById(discordId);
+  if (!user) {
+    return null;
+  }
+
+  const removedItems = [...user.inventory];
+  user.inventory = [];
+  const savedUser = await saveUser(user);
+
+  return {
+    user: savedUser,
+    removedItems
+  };
+}
+
 export async function updateUserBalance(discordId, delta) {
   const user = await getUserById(discordId);
   if (!user) {

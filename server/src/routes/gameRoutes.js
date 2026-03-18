@@ -5,6 +5,7 @@ import { resolveUserFromToken } from "../services/authService.js";
 import { getFeed, pushFeedEvent } from "../services/feedService.js";
 import {
   addInventoryItems,
+  clearInventory,
   getLeaderboard,
   getOrCreateUser,
   getUserById,
@@ -115,6 +116,36 @@ gameRouter.post("/inventory/sell", async (req, res, next) => {
     return res.json({
       soldItemId: itemId,
       credited: item.sellPrice,
+      balance: updatedUser.balance
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+gameRouter.post("/inventory/sell-all", async (req, res, next) => {
+  try {
+    const user = await resolveRequestUser(req);
+    const ownedUser = await getUserById(user.id);
+
+    if (!ownedUser.inventory.length) {
+      return res.json({
+        soldCount: 0,
+        credited: 0,
+        balance: ownedUser.balance
+      });
+    }
+
+    const credited = Number(
+      ownedUser.inventory.reduce((sum, item) => sum + Number(item.sellPrice || 0), 0).toFixed(2)
+    );
+
+    await clearInventory(user.id);
+    const updatedUser = await updateUserBalance(user.id, credited);
+
+    return res.json({
+      soldCount: ownedUser.inventory.length,
+      credited,
       balance: updatedUser.balance
     });
   } catch (error) {
