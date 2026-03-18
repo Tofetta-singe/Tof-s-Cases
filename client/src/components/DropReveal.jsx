@@ -1,18 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, animate, motion, useMotionValue } from "framer-motion";
 
 const BASIC_REVEAL_SOUND = "/sound_ui_item_drop_basic.wav";
 const LEGENDARY_REVEAL_SOUND = "/sound_ui_item_reveal5_legendary.wav";
 const SCROLL_SOUND = "/sound_ui_csgo_ui_crate_item_scroll.wav";
-const WINDOW_OFFSETS = [-2, -1, 0, 1, 2, 3];
-const CARD_WIDTH = 100 / 6;
+const GAP = 12;
+const VISIBLE_CARDS = 6;
 
 function currency(value) {
   return `${Number(value || 0).toFixed(2)}\u20ac`;
-}
-
-function easeOutCubic(value) {
-  return 1 - Math.pow(1 - value, 3);
 }
 
 function playAudio(audioRef, src, volume) {
@@ -33,11 +29,15 @@ function isLegendary(rarityName = "") {
 
 function rarityShadow(rarityName = "") {
   if (rarityName === "Special Rare") {
-    return "0 0 30px rgba(232, 198, 79, 0.35)";
+    return "0 0 32px rgba(232, 198, 79, 0.45)";
   }
 
   if (rarityName === "Covert") {
-    return "0 0 26px rgba(226, 83, 83, 0.28)";
+    return "0 0 30px rgba(226, 83, 83, 0.35)";
+  }
+
+  if (rarityName === "Classified") {
+    return "0 0 24px rgba(209, 91, 255, 0.25)";
   }
 
   return "none";
@@ -52,13 +52,19 @@ export function DropReveal({
   onReroll
 }) {
   const [phase, setPhase] = useState("idle");
-  const [progress, setProgress] = useState(2);
+  const [cardWidth, setCardWidth] = useState(160);
+  const viewportRef = useRef(null);
   const scrollAudioRef = useRef(null);
   const revealAudioRef = useRef(null);
-  const lastTickRef = useRef(-1);
+  const tickIndexRef = useRef(0);
+  const animationRef = useRef(null);
+  const trackX = useMotionValue(0);
 
   const reward = opening?.reward || null;
+  const items = opening?.reel?.items || [];
+  const winnerIndex = opening?.reel?.winnerIndex ?? 0;
   const rewardRarityColor = reward?.rarity?.color || "#6b7280";
+
   const rewardTitleParts = useMemo(() => {
     if (!reward?.name) {
       return { weapon: "", skin: "" };
@@ -71,66 +77,62 @@ export function DropReveal({
     };
   }, [reward?.name]);
 
-  const winnerIndex = opening?.reel?.winnerIndex ?? 0;
-  const baseIndex = Math.floor(progress);
-  const progressOffset = progress - baseIndex;
+  useLayoutEffect(() => {
+    if (!viewportRef.current) {
+      return undefined;
+    }
 
-  const visibleItems = useMemo(
-    () =>
-      WINDOW_OFFSETS.map((offset) => {
-        const itemIndex = baseIndex + offset;
-        return {
-          item: opening?.reel?.items?.[itemIndex] || null,
-          itemIndex
-        };
-      }),
-    [baseIndex, opening?.reel?.items]
-  );
+    const element = viewportRef.current;
+
+    const updateSize = () => {
+      const width = element.clientWidth;
+      const nextCardWidth = Math.max(120, (width - GAP * (VISIBLE_CARDS - 1)) / VISIBLE_CARDS);
+      setCardWidth(nextCardWidth);
+    };
+
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
-    if (!reward) {
+    if (!reward || !items.length || !viewportRef.current) {
       return undefined;
     }
 
-    if (!opening?.reel?.items?.length) {
-      setPhase("settled");
-      return undefined;
-    }
-
+    animationRef.current?.stop?.();
     setPhase("spinning");
-    setProgress(2);
-    lastTickRef.current = 2;
 
-    const startValue = 2;
-    const targetValue = winnerIndex;
-    const duration = opening.reel.durationMs || 5000;
-    const startTime = performance.now();
-    let animationFrame = 0;
-    let finished = false;
+    const viewportWidth = viewportRef.current.clientWidth;
+    const step = cardWidth + GAP;
+    const winnerCenter = winnerIndex * step + cardWidth / 2;
+    const targetX = viewportWidth / 2 - winnerCenter;
+    const startIndex = Math.max(2, Math.min(5, items.length - VISIBLE_CARDS));
+    const startCenter = startIndex * step + cardWidth / 2;
+    const startX = viewportWidth / 2 - startCenter;
 
-    const tick = (now) => {
-      const elapsed = Math.min(now - startTime, duration);
-      const ratio = duration === 0 ? 1 : elapsed / duration;
-      const eased = easeOutCubic(ratio);
-      const nextValue = startValue + (targetValue - startValue) * eased;
-      const boundedValue = Math.min(nextValue, targetValue);
-      const discreteTick = Math.floor(boundedValue);
+    tickIndexRef.current = startIndex;
+    trackX.set(startX);
 
-      setProgress(boundedValue);
+    const unsubscribe = trackX.on("change", (latest) => {
+      const progress = (viewportWidth / 2 - latest - cardWidth / 2) / step;
+      const nextTick = Math.floor(progress);
 
-      if (discreteTick > lastTickRef.current && discreteTick < targetValue) {
-        lastTickRef.current = discreteTick;
+      if (nextTick > tickIndexRef.current && nextTick < winnerIndex) {
+        tickIndexRef.current = nextTick;
         playAudio(scrollAudioRef, SCROLL_SOUND, volume);
       }
+    });
 
-      if (ratio < 1) {
-        animationFrame = window.requestAnimationFrame(tick);
-        return;
-      }
-
-      if (!finished) {
-        finished = true;
-        setProgress(targetValue);
+    animationRef.current = animate(trackX, targetX, {
+      duration: (opening.reel?.durationMs || 5000) / 1000,
+      ease: [0.05, 0.9, 0.15, 1],
+      onComplete: () => {
         setPhase("settled");
         playAudio(
           revealAudioRef,
@@ -139,14 +141,15 @@ export function DropReveal({
         );
         onRevealEnd?.();
       }
-    };
-
-    animationFrame = window.requestAnimationFrame(tick);
+    });
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
+      unsubscribe();
+      animationRef.current?.stop?.();
     };
-  }, [opening, onRevealEnd, reward, volume, winnerIndex]);
+  }, [reward, items, winnerIndex, opening?.reel?.durationMs, cardWidth, trackX, onRevealEnd, volume]);
+
+  const trackWidth = items.length ? items.length * cardWidth + Math.max(items.length - 1, 0) * GAP : 0;
 
   return (
     <AnimatePresence>
@@ -159,64 +162,57 @@ export function DropReveal({
           className="cs-panel rounded-[18px] px-5 py-5 md:px-6"
         >
           <div className="text-center">
-            {phase === "settled" ? (
-              <h2 className="text-[28px] font-bold leading-tight text-white md:text-[34px]">
-                {rewardTitleParts.weapon}
-                {rewardTitleParts.skin ? (
-                  <>
-                    {" | "}
-                    <span style={{ color: rewardRarityColor }}>{rewardTitleParts.skin}</span>
-                  </>
-                ) : null}
-                <span className="text-slate-300"> ({reward.wear})</span>
-              </h2>
-            ) : (
-              <h2 className="text-[28px] font-bold leading-tight text-slate-200 md:text-[34px]">
-                Opening Case...
-              </h2>
-            )}
+            <h2 className="text-[28px] font-bold leading-tight text-white md:text-[34px]">
+              {rewardTitleParts.weapon}
+              {rewardTitleParts.skin ? (
+                <>
+                  {" | "}
+                  <span style={{ color: rewardRarityColor }}>{rewardTitleParts.skin}</span>
+                </>
+              ) : null}
+              <span className="text-slate-300"> ({reward.wear})</span>
+            </h2>
           </div>
 
           <div className="mt-4 overflow-hidden rounded-[6px] border border-white/12 bg-[rgba(90,92,97,0.55)] p-3">
-            <div className="relative overflow-hidden">
-              <div className="pointer-events-none absolute left-1/2 top-0 z-20 h-full w-[4px] -translate-x-1/2 bg-[#ead95f]" />
+            <div ref={viewportRef} className="relative overflow-hidden">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 bg-[linear-gradient(90deg,rgba(58,61,67,0.92)_0%,rgba(58,61,67,0)_100%)]" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 bg-[linear-gradient(270deg,rgba(58,61,67,0.92)_0%,rgba(58,61,67,0)_100%)]" />
+              <div className="pointer-events-none absolute left-1/2 top-0 z-30 h-full w-[4px] -translate-x-1/2 bg-[#ead95f] shadow-[0_0_20px_rgba(234,217,95,0.85)]" />
+
               <motion.div
-                className="flex gap-3"
-                animate={{ x: `${-progressOffset * CARD_WIDTH}%` }}
-                transition={{ ease: "linear", duration: 0.05 }}
+                className="flex will-change-transform"
+                style={{
+                  x: trackX,
+                  width: trackWidth,
+                  gap: `${GAP}px`
+                }}
               >
-                {visibleItems.map(({ item, itemIndex }, index) => {
-                  const hiddenWinner = phase !== "settled" && itemIndex === winnerIndex;
-                  const itemToRender = hiddenWinner ? null : item;
+                {items.map((item, index) => {
+                  const nearWinner = phase === "spinning" && Math.abs(index - winnerIndex) <= 2;
 
                   return (
                     <div
-                      key={item?.itemId || `placeholder-${index}-${itemIndex}`}
-                      className="relative h-[200px] min-w-0 flex-1 overflow-hidden rounded-[2px] border border-black/25 bg-[linear-gradient(180deg,rgba(120,118,120,0.7)_0%,rgba(100,100,106,0.78)_70%,rgba(76,78,84,0.95)_100%)]"
+                      key={item.itemId || `${item.name}-${index}`}
+                      className="relative h-[200px] shrink-0 overflow-hidden rounded-[2px] border border-black/25 bg-[linear-gradient(180deg,rgba(124,122,124,0.72)_0%,rgba(98,100,106,0.8)_72%,rgba(74,78,84,0.97)_100%)]"
                       style={{
-                        boxShadow:
-                          phase === "spinning" && itemToRender
-                            ? rarityShadow(itemToRender.rarity?.name)
-                            : "none"
+                        width: `${cardWidth}px`,
+                        boxShadow: nearWinner ? rarityShadow(item.rarity?.name) : "none"
                       }}
                     >
-                      {itemToRender ? (
-                        <>
-                          <img
-                            src={itemToRender.image}
-                            alt={itemToRender.name}
-                            className="mx-auto mt-5 h-32 w-32 object-contain drop-shadow-[0_18px_24px_rgba(0,0,0,0.45)]"
-                          />
-                          <div
-                            className="absolute bottom-0 left-0 h-[4px] w-full"
-                            style={{ backgroundColor: itemToRender.rarity?.color || "#6b7280" }}
-                          />
-                        </>
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-sm font-semibold uppercase tracking-[0.2em] text-slate-300/70">
-                          Hidden
-                        </div>
-                      )}
+                      <div className="absolute inset-x-0 top-0 h-12 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_100%)]" />
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="mx-auto mt-5 h-32 w-32 object-contain drop-shadow-[0_18px_24px_rgba(0,0,0,0.45)]"
+                      />
+                      {nearWinner ? (
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12),transparent_60%)]" />
+                      ) : null}
+                      <div
+                        className="absolute bottom-0 left-0 h-[4px] w-full"
+                        style={{ backgroundColor: item.rarity?.color || "#6b7280" }}
+                      />
                     </div>
                   );
                 })}
