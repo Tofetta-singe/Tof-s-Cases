@@ -9,9 +9,13 @@ import { battleRouter } from "./routes/battleRoutes.js";
 export function createApp() {
   const app = express();
 
-  app.use(
+app.use(
     cors({
-      origin: env.clientUrl,
+      origin: [
+        "http://localhost:5173",                 // Ton PC (Vite)
+        "https://tof-s-cases-client.vercel.app", // Ton URL Vercel exacte
+        env.clientUrl                            // La variable que tu as mis dans ton .env
+      ],
       credentials: true
     })
   );
