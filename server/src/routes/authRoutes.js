@@ -19,7 +19,7 @@ authRouter.get("/discord", (_req, res) => {
   return res.json({ url: getDiscordAuthUrl() });
 });
 
-authRouter.get("/discord/callback", async (req, res, next) => {
+async function handleDiscordCallback(req, res, next) {
   try {
     const code = req.query.code;
     if (!code) {
@@ -31,7 +31,10 @@ authRouter.get("/discord/callback", async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
-});
+}
+
+authRouter.get("/discord/callback", handleDiscordCallback);
+authRouter.get("/callback", handleDiscordCallback);
 
 authRouter.get("/me", async (req, res) => {
   const token = req.headers.authorization?.replace("Bearer ", "");

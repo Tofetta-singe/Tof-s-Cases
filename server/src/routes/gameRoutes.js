@@ -69,14 +69,11 @@ gameRouter.post("/cases/open", async (req, res, next) => {
 
     const { reward, reel } = previewConfiguredCase(caseId);
     await addInventoryItems(user.id, [reward]);
-
-    if (reward.price >= 120) {
-      pushFeedEvent({
-        type: "big-drop",
-        username: user.username,
-        reward
-      });
-    }
+    pushFeedEvent({
+      type: reward.price >= 120 ? "big-drop" : "case-open",
+      username: user.username,
+      reward
+    });
 
     return res.json({ reward, reel });
   } catch (error) {

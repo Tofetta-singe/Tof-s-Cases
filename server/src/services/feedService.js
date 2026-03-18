@@ -6,7 +6,7 @@ export function pushFeedEvent(event) {
     createdAt: new Date().toISOString(),
     ...event
   });
-  memoryStore.feed = memoryStore.feed.slice(0, 15);
+  memoryStore.feed = memoryStore.feed.slice(0, 40);
   return memoryStore.feed;
 }
 

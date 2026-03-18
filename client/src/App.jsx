@@ -6,6 +6,7 @@ import { DropReveal } from "./components/DropReveal";
 import { InventoryGrid } from "./components/InventoryGrid";
 import { BattlePanel } from "./components/BattlePanel";
 import { LiveFeed } from "./components/LiveFeed";
+import { StatCard } from "./components/StatCard";
 
 function currency(value) {
   return `${Number(value || 0).toFixed(2)}\u20ac`;
@@ -225,6 +226,34 @@ export default function App() {
   const totalNetWorth = useMemo(
     () => Number((Number(dashboard.user.balance || 0) + Number(dashboard.user.totalInventoryValue || 0)).toFixed(2)),
     [dashboard.user.balance, dashboard.user.totalInventoryValue]
+  );
+  const rarityStats = useMemo(() => {
+    const counts = new Map();
+
+    for (const item of dashboard.user.inventory) {
+      const rarityName = item.rarity?.name || "Unknown";
+      const current = counts.get(rarityName) || {
+        name: rarityName,
+        color: item.rarity?.color || "#94a3b8",
+        count: 0,
+        value: 0
+      };
+      current.count += 1;
+      current.value = Number((current.value + Number(item.price || 0)).toFixed(2));
+      counts.set(rarityName, current);
+    }
+
+    return [...counts.values()].sort((a, b) => b.count - a.count || b.value - a.value);
+  }, [dashboard.user.inventory]);
+  const inventorySummary = useMemo(
+    () => ({
+      totalItems: dashboard.user.inventory.length,
+      selectedCount: selectedTradeUp.length,
+      averageValue: dashboard.user.inventory.length
+        ? Number((dashboard.user.totalInventoryValue / dashboard.user.inventory.length).toFixed(2))
+        : 0
+    }),
+    [dashboard.user.inventory.length, dashboard.user.totalInventoryValue, selectedTradeUp.length]
   );
 
   const caseColumns = useMemo(() => {
@@ -484,6 +513,20 @@ export default function App() {
                   Trade Up 10/10
                 </button>
               </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Items</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{inventorySummary.totalItems}</p>
+                </div>
+                <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Selected</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{inventorySummary.selectedCount}/10</p>
+                </div>
+                <div className="rounded-[16px] border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Average Value</p>
+                  <p className="mt-2 text-2xl font-semibold text-white">{currency(inventorySummary.averageValue)}</p>
+                </div>
+              </div>
               <div className="mt-5">
                 <InventoryGrid
                   inventory={dashboard.user.inventory}
@@ -502,25 +545,59 @@ export default function App() {
               </div>
             </div>
 
-            <div className="cs-panel rounded-[18px] p-5">
-              <h3 className="text-[28px] font-bold uppercase text-white">Trade Queue</h3>
-              <div className="mt-4 space-y-3">
-                {selectedTradeUpItems.map((item) => (
-                  <div
-                    key={item.itemId}
-                    className="rounded-[10px] border border-white/10 bg-black/15 px-4 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-lg text-white">{item.name}</span>
-                      <span className="text-base font-semibold" style={{ color: item.rarity.color }}>
-                        {item.rarity.name}
-                      </span>
+            <div className="space-y-6">
+              <div className="cs-panel rounded-[18px] p-5">
+                <h3 className="text-[28px] font-bold uppercase text-white">Trade Queue</h3>
+                <div className="mt-4 space-y-3">
+                  {selectedTradeUpItems.map((item) => (
+                    <div
+                      key={item.itemId}
+                      className="rounded-[14px] border border-white/10 bg-black/15 px-4 py-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-lg text-white">{item.name}</span>
+                        <span className="text-base font-semibold" style={{ color: item.rarity.color }}>
+                          {item.rarity.name}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {!selectedTradeUpItems.length ? (
-                  <p className="text-lg text-slate-300">No skins selected.</p>
-                ) : null}
+                  ))}
+                  {!selectedTradeUpItems.length ? (
+                    <p className="text-lg text-slate-300">No skins selected.</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="cs-panel rounded-[18px] p-5">
+                <h3 className="text-[28px] font-bold uppercase text-white">Rarity Breakdown</h3>
+                <div className="mt-4 space-y-3">
+                  {rarityStats.length ? (
+                    rarityStats.map((rarity) => (
+                      <div
+                        key={rarity.name}
+                        className="rounded-[14px] border border-white/10 bg-black/15 px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold" style={{ color: rarity.color }}>
+                            {rarity.name}
+                          </span>
+                          <span className="text-sm text-slate-300">{rarity.count} skins</span>
+                        </div>
+                        <div className="mt-2 h-2 rounded-full bg-white/8">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(10, (rarity.count / Math.max(inventorySummary.totalItems, 1)) * 100)}%`,
+                              backgroundColor: rarity.color
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-lg text-slate-300">Open some cases to build your rarity spread.</p>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -538,10 +615,11 @@ export default function App() {
         ) : null}
 
         {selectedView === "stats" ? (
-          <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <section className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
             <div className="cs-panel rounded-[18px] p-5">
               <h3 className="text-[28px] font-bold uppercase text-white">Live Feed</h3>
-              <div className="mt-4">
+              <p className="mt-2 text-sm text-slate-400">Latest skins opened across the site.</p>
+              <div className="mt-4 max-h-[720px] overflow-y-auto pr-1">
                 <LiveFeed
                   feed={
                     dashboard.feed.length
@@ -558,22 +636,63 @@ export default function App() {
               </div>
             </div>
 
-            <div className="cs-panel rounded-[18px] p-5">
-              <h3 className="text-[28px] font-bold uppercase text-white">Leaderboard</h3>
-              <div className="mt-4 space-y-3">
-                {dashboard.leaderboard.map((player, index) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center justify-between rounded-[10px] border border-white/10 bg-black/15 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg text-slate-300">#{index + 1}</span>
-                      <img src={player.avatar} alt={player.username} className="h-10 w-10 rounded-full" />
-                      <span className="text-lg font-semibold text-white">{player.username}</span>
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-3">
+                <StatCard label="Owned Skins" value={dashboard.user.inventory.length} />
+                <StatCard label="Distinct Rarities" value={rarityStats.length} />
+                <StatCard label="Inventory Value" value={currency(dashboard.user.totalInventoryValue || 0)} />
+              </div>
+
+              <div className="cs-panel rounded-[18px] p-5">
+                <h3 className="text-[28px] font-bold uppercase text-white">Your Rarities</h3>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {rarityStats.length ? (
+                    rarityStats.map((rarity) => (
+                      <div
+                        key={rarity.name}
+                        className="rounded-[14px] border border-white/10 bg-black/15 px-4 py-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-lg font-semibold" style={{ color: rarity.color }}>
+                            {rarity.name}
+                          </span>
+                          <span className="text-sm text-slate-300">{rarity.count}</span>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-400">Total value: {currency(rarity.value)}</p>
+                        <div className="mt-3 h-2 rounded-full bg-white/8">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(8, (rarity.count / Math.max(dashboard.user.inventory.length, 1)) * 100)}%`,
+                              backgroundColor: rarity.color
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-lg text-slate-300">No rarity data yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="cs-panel rounded-[18px] p-5">
+                <h3 className="text-[28px] font-bold uppercase text-white">Leaderboard</h3>
+                <div className="mt-4 space-y-3">
+                  {dashboard.leaderboard.map((player, index) => (
+                    <div
+                      key={player.id}
+                      className="flex items-center justify-between rounded-[10px] border border-white/10 bg-black/15 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg text-slate-300">#{index + 1}</span>
+                        <img src={player.avatar} alt={player.username} className="h-10 w-10 rounded-full" />
+                        <span className="text-lg font-semibold text-white">{player.username}</span>
+                      </div>
+                      <span className="text-lg font-bold text-[#84d2ff]">{currency(player.totalInventoryValue)}</span>
                     </div>
-                    <span className="text-lg font-bold text-[#84d2ff]">{currency(player.totalInventoryValue)}</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </section>
