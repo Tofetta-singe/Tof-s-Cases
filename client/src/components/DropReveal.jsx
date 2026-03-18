@@ -16,6 +16,7 @@ function playAudio(audioRef, src, volume) {
     audioRef.current = new Audio(src);
   }
 
+  // Permet de mitrailler le même son très rapidement
   audioRef.current.pause();
   audioRef.current.currentTime = 0;
   audioRef.current.src = src;
@@ -56,9 +57,8 @@ export function DropReveal({
   const revealAudioRef = useRef(null);
   const activeRevealIdRef = useRef("");
   
-  // Références pour les minuteurs
   const finishTimeoutRef = useRef(null);
-  const scrollIntervalRef = useRef(null);
+  const animationFrameRef = useRef(null); // NOUVEAU : Pour suivre la position en temps réel
 
   const reward = opening?.reward || null;
   const items = opening?.reel?.items || [];
@@ -66,17 +66,11 @@ export function DropReveal({
   const rewardRarityColor = reward?.rarity?.color || "#6b7280";
 
   const rewardTitleParts = useMemo(() => {
-    if (!reward?.name) {
-      return { weapon: "", skin: "" };
-    }
+    if (!reward?.name) return { weapon: "", skin: "" };
     const [weapon, skin] = reward.name.split(" | ");
-    return {
-      weapon: weapon || reward.name,
-      skin: skin || ""
-    };
+    return { weapon: weapon || reward.name, skin: skin || "" };
   }, [reward?.name]);
 
-  // Gestion responsive de la largeur des cartes
   useLayoutEffect(() => {
     if (!viewportRef.current) return undefined;
     const element = viewportRef.current;
@@ -94,15 +88,13 @@ export function DropReveal({
     return () => observer.disconnect();
   }, []);
 
-  // NETTOYAGE SÉCURISÉ : On coupe les sons/timers uniquement quand on détruit le composant
   useEffect(() => {
     return () => {
       if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
-      if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, []);
 
-  // LOGIQUE DE L'ANIMATION (Isolée des re-renders)
   useEffect(() => {
     const revealId = opening?.revealId || reward?.itemId || "";
     const duration = opening?.reel?.durationMs || 5000;
@@ -111,18 +103,13 @@ export function DropReveal({
       return;
     }
 
-    // Protection : Si l'animation de CE drop est déjà lancée, on annule pour ne pas la couper.
-    if (activeRevealIdRef.current === revealId) {
-      return;
-    }
-
+    if (activeRevealIdRef.current === revealId) return;
     activeRevealIdRef.current = revealId;
     setPhase("spinning");
 
     const viewportWidth = viewportRef.current.clientWidth;
     const trackEl = trackRef.current;
     
-    // On recalcule ici la taille pour s'assurer que targetX est parfait
     const currentCardWidth = Math.max(120, (viewportWidth - GAP * (VISIBLE_CARDS - 1)) / VISIBLE_CARDS);
     const step = currentCardWidth + GAP;
     
@@ -133,27 +120,54 @@ export function DropReveal({
     const startCenter = startIndex * step + currentCardWidth / 2;
     const startX = viewportWidth / 2 - startCenter;
 
-    // Reset de l'animation
     trackEl.style.transition = "none";
     trackEl.style.transform = `translate3d(${startX}px, 0, 0)`;
 
-    // Force le navigateur à appliquer la position de départ avant d'animer
-    void trackEl.offsetWidth;
+    void trackEl.offsetWidth; // Force layout
 
-    // Lancement
     trackEl.style.transition = `transform ${duration}ms cubic-bezier(0.06, 0.88, 0.18, 1)`;
     trackEl.style.transform = `translate3d(${targetX}px, 0, 0)`;
 
-    // Son "clic-clic" de la roulette
-    if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
-    scrollIntervalRef.current = window.setInterval(() => {
-      playAudio(scrollAudioRef, SCROLL_SOUND, volume);
-    }, 95);
+    // ==========================================
+    // LE SECRET DE LA SYNCHRONISATION EST ICI
+    // ==========================================
+    let lastTickIndex = 0;
+    
+    const trackPositionAndPlaySound = () => {
+      if (!trackRef.current) return;
 
-    // Fin de l'animation
+      // On lit la position X exacte du conteneur pendant qu'il bouge
+      const style = window.getComputedStyle(trackRef.current);
+      const matrix = new DOMMatrix(style.transform);
+      const currentX = matrix.m41; 
+
+      // On calcule combien de pixels on a parcouru
+      const distanceTraveled = Math.abs(currentX - startX);
+      
+      // On déduit combien de skins on a dépassé
+      const currentTickIndex = Math.floor(distanceTraveled / step);
+
+      // Si on vient de passer un nouveau skin, on joue le son !
+      if (currentTickIndex > lastTickIndex) {
+        lastTickIndex = currentTickIndex;
+        playAudio(scrollAudioRef, SCROLL_SOUND, volume);
+      }
+
+      // On boucle l'observation à l'image suivante (60 FPS)
+      animationFrameRef.current = requestAnimationFrame(trackPositionAndPlaySound);
+    };
+
+    // On lance l'observation
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    animationFrameRef.current = requestAnimationFrame(trackPositionAndPlaySound);
+
+    // ==========================================
+
     if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
     finishTimeoutRef.current = window.setTimeout(() => {
-      if (scrollIntervalRef.current) window.clearInterval(scrollIntervalRef.current);
+      // On arrête d'observer la position
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      
       setPhase("settled");
       playAudio(
         revealAudioRef,
@@ -163,9 +177,8 @@ export function DropReveal({
       onRevealEnd?.();
     }, duration);
 
-    // ATTENTION : Pas de `return` de nettoyage ici, sinon React tue l'animation au moindre re-render !
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opening?.revealId]); // <-- Ne dépend QUE de l'ID pour ne pas s'interrompre
+  }, [opening?.revealId]);
 
   const trackWidth = items.length ? items.length * cardWidth + Math.max(items.length - 1, 0) * GAP : 0;
 
@@ -213,7 +226,6 @@ export function DropReveal({
                 }}
               >
                 {items.map((item, index) => {
-                  // CORRECTION : Le skin gagnant reste illuminé à la fin (settled)
                   const isWinner = index === winnerIndex;
                   const isGlowing = (phase === "spinning" && Math.abs(index - winnerIndex) <= 2) || (phase === "settled" && isWinner);
 
