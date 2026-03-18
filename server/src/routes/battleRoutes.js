@@ -30,7 +30,7 @@ battleRouter.post("/", async (req, res, next) => {
     const battle = await createBattle({
       host: user,
       caseIds,
-      maxPlayers
+      maxPlayers: maxPlayers || 4
     });
     return res.json({ battle });
   } catch (error) {

@@ -1,14 +1,36 @@
 import { memoryStore } from "../data/memoryStore.js";
 import { createId } from "../utils/random.js";
-import { openConfiguredCase } from "./caseService.js";
+import { previewConfiguredCase } from "./caseService.js";
 import { addInventoryItems } from "./inventoryService.js";
+import { getCaseById, getDailyFreeCase } from "./skinService.js";
 
-export async function createBattle({ host, caseIds, maxPlayers = 2 }) {
+function getBattleCaseSnapshot(caseId) {
+  if (caseId === "free-daily-case") {
+    return getDailyFreeCase();
+  }
+
+  const caseData = getCaseById(caseId);
+  if (!caseData) {
+    throw new Error("Case not found");
+  }
+
+  return {
+    id: caseData.id,
+    name: caseData.name,
+    image: caseData.image,
+    price: caseData.price
+  };
+}
+
+export async function createBattle({ host, caseIds, maxPlayers = 4 }) {
+  const caseQueue = (caseIds || []).map(getBattleCaseSnapshot);
   const battle = {
     roomId: createId("room"),
     status: "waiting",
     maxPlayers,
-    caseIds,
+    caseIds: caseQueue.map((item) => item.id),
+    caseQueue,
+    hostId: host.id,
     players: [
       {
         userId: host.id,
@@ -18,8 +40,11 @@ export async function createBattle({ host, caseIds, maxPlayers = 2 }) {
         drops: []
       }
     ],
+    rounds: [],
+    currentRoundIndex: -1,
     winnerId: null,
-    winnerValue: 0
+    winnerValue: 0,
+    createdAt: Date.now()
   };
 
   memoryStore.battles.set(battle.roomId, battle);
@@ -75,23 +100,38 @@ export async function startBattle(roomId) {
     throw new Error("At least two players are required");
   }
 
+  battle.players = battle.players.map((player) => ({
+    ...player,
+    totalValue: 0,
+    drops: []
+  }));
   battle.status = "live";
   const rounds = [];
 
-  for (const caseId of battle.caseIds) {
+  for (const [roundIndex, caseEntry] of battle.caseQueue.entries()) {
     const round = {
-      caseId,
+      roundIndex,
+      caseId: caseEntry.id,
+      caseName: caseEntry.name,
+      caseImage: caseEntry.image,
+      casePrice: caseEntry.price,
+      revealDurationMs: 5200,
       drops: []
     };
 
     for (const player of battle.players) {
-      const reward = openConfiguredCase(caseId);
+      const { reward, reel } = previewConfiguredCase(caseEntry.id);
       player.drops.push(reward);
       player.totalValue = Number((player.totalValue + reward.price).toFixed(2));
       round.drops.push({
         userId: player.userId,
         username: player.username,
-        reward
+        avatar: player.avatar,
+        reward,
+        reel: {
+          ...reel,
+          durationMs: round.revealDurationMs
+        }
       });
     }
 
@@ -99,7 +139,9 @@ export async function startBattle(roomId) {
   }
 
   const winner = [...battle.players].sort((a, b) => b.totalValue - a.totalValue)[0];
+  battle.rounds = rounds;
   battle.status = "finished";
+  battle.currentRoundIndex = rounds.length - 1;
   battle.winnerId = winner.userId;
   battle.winnerValue = winner.totalValue;
 

@@ -2,6 +2,12 @@ import { createBattle, getBattle, joinBattle, startBattle } from "../services/ba
 import { getOrCreateUser } from "../services/inventoryService.js";
 import { pushFeedEvent } from "../services/feedService.js";
 
+function wait(durationMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+}
+
 export function registerBattleSocket(io) {
   io.on("connection", (socket) => {
     socket.on("battle:create", async (payload, callback) => {
@@ -14,9 +20,10 @@ export function registerBattleSocket(io) {
         const battle = await createBattle({
           host: user,
           caseIds: payload.caseIds,
-          maxPlayers: payload.maxPlayers
+          maxPlayers: payload.maxPlayers || 4
         });
         socket.join(battle.roomId);
+        io.to(battle.roomId).emit("battle:state", battle);
         io.emit("battle:list-updated");
         callback?.({ battle });
       } catch (error) {
@@ -55,10 +62,12 @@ export function registerBattleSocket(io) {
         }
 
         io.to(roomId).emit("battle:state", { ...battle, status: "live" });
+        io.emit("battle:list-updated");
         const result = await startBattle(roomId);
 
         for (const round of result.rounds) {
           io.to(roomId).emit("battle:round", round);
+          await wait(round.revealDurationMs + 350);
         }
 
         io.to(roomId).emit("battle:finished", result);

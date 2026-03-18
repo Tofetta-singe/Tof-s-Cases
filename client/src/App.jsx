@@ -155,8 +155,10 @@ export default function App() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const token = url.searchParams.get("token");
+    let tokenApplied = false;
     if (token) {
       setSessionToken(token);
+      tokenApplied = true;
       url.searchParams.delete("token");
       window.history.replaceState({}, "", url.toString());
     }
@@ -185,6 +187,10 @@ export default function App() {
           discordEnabled: url.status === "fulfilled",
           authenticated: me.status === "fulfilled"
         });
+
+        if (tokenApplied || me.status === "fulfilled") {
+          setRefreshKey((value) => value + 1);
+        }
       } catch {
         if (!cancelled) {
           setAuthStatus({
@@ -386,6 +392,39 @@ export default function App() {
             <p className="text-[19px] font-bold leading-none text-[#7cc3ff]">Net Worth</p>
           </div>
         </header>
+
+        <div className="mt-4 flex justify-center xl:justify-end">
+          <div className="cs-top-box flex w-full max-w-[420px] items-center justify-between gap-4 rounded-[12px] border border-[#4e5258] px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.28em] text-slate-300">Account</p>
+              <p className="truncate text-lg font-semibold text-white">
+                {authStatus.authenticated ? dashboard.user.username : "Demo Mode"}
+              </p>
+            </div>
+            {authStatus.authenticated ? (
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-4 py-2 text-sm font-semibold text-[#88ff7b]"
+              >
+                Logout
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={loginWithDiscord}
+                disabled={!authStatus.discordEnabled || authStatus.loading}
+                className="rounded-[10px] border border-[#7289da] bg-[linear-gradient(180deg,#596fd8_0%,#4258be_100%)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {authStatus.loading
+                  ? "Checking..."
+                  : authStatus.discordEnabled
+                    ? "Login with Discord"
+                    : "Discord Unavailable"}
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="mt-5">
           {actionError ? (
