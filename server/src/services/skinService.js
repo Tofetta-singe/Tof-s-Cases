@@ -22,6 +22,13 @@ const rarityUpgradePath = [
 const crateMap = new Map();
 const freeDailyPool = [];
 
+function isSpecialRareSkin(skin = {}) {
+  const categoryName = skin.category?.name || "";
+  const weaponName = skin.weapon?.name || skin.name || "";
+
+  return /glove/i.test(categoryName) || /knife|daggers|bayonet|karambit|talon|ursus|navaja|stiletto|skeleton|kukri|nomad|paracord|survival/i.test(weaponName);
+}
+
 function normalizeRarity(rarity = {}) {
   const name = rarity.name || "Mil-Spec";
   const cleaned = name.replace(/\s+Grade$/i, "");
@@ -41,7 +48,13 @@ function normalizeRarity(rarity = {}) {
 }
 
 function enrichSkin(skin, crateName = "") {
-  const normalizedRarity = normalizeRarity(skin.rarity);
+  const normalizedRarity = isSpecialRareSkin(skin)
+    ? {
+        ...normalizeRarity(skin.rarity),
+        name: "Special Rare",
+        color: "#e4ae39"
+      }
+    : normalizeRarity(skin.rarity);
 
   return {
     ...skin,
@@ -57,7 +70,13 @@ function enrichSkin(skin, crateName = "") {
 }
 
 for (const skin of skins) {
-  const normalizedRarity = normalizeRarity(skin.rarity);
+  const normalizedRarity = isSpecialRareSkin(skin)
+    ? {
+        ...normalizeRarity(skin.rarity),
+        name: "Special Rare",
+        color: "#e4ae39"
+      }
+    : normalizeRarity(skin.rarity);
 
   if (
     skin.souvenir &&

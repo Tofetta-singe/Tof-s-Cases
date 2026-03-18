@@ -2,22 +2,22 @@ import { getOfficialCaseMarketPriceByName } from "../data/caseCatalog.js";
 
 const rarityBasePrice = {
   Consumer: [0.03, 0.45],
-  Industrial: [0.06, 0.85],
-  "Mil-Spec": [0.18, 3.8],
-  Restricted: [0.7, 11],
-  Classified: [2.8, 36],
-  Covert: [12, 180],
+  Industrial: [0.05, 0.45],
+  "Mil-Spec": [0.08, 1.2],
+  Restricted: [0.25, 4.5],
+  Classified: [0.9, 12],
+  Covert: [3.5, 45],
   "Special Rare": [140, 1800],
   Contraband: [180, 2200]
 };
 
 const categoryMultiplier = {
-  Gloves: 2.6,
-  Knives: 3.1,
-  Pistols: 0.9,
-  SMGs: 1,
-  Rifles: 1.45,
-  Sniper: 1.9
+  Gloves: 1.8,
+  Knives: 2.2,
+  Pistols: 0.75,
+  SMGs: 0.82,
+  Rifles: 1.05,
+  Sniper: 1.3
 };
 
 function resolveCategoryMultiplier(categoryName = "", weaponName = "") {
@@ -50,7 +50,7 @@ function getCaseMultiplier(caseName = "") {
     return 1;
   }
 
-  return Math.max(0.9, Math.sqrt(casePrice / 0.5));
+  return Math.max(0.72, Math.min(2.1, Math.pow(casePrice / 0.65, 0.28)));
 }
 
 function getFinishMultiplier(skin) {
@@ -84,10 +84,11 @@ export function estimateBasePrice(skin, caseName = "") {
 }
 
 export function applyFloatPrice(basePrice, floatValue) {
-  const wearMultiplier = Math.max(0.58, 1.24 - floatValue * 0.66);
+  const wearMultiplier = Math.max(0.7, 1.12 - floatValue * 0.4);
   return Number((basePrice * wearMultiplier).toFixed(2));
 }
 
 export function getSellPrice(realPrice) {
-  return Number((realPrice * 0.85).toFixed(2));
+  const margin = realPrice < 1 ? 0.7 : realPrice < 10 ? 0.76 : 0.82;
+  return Number((realPrice * margin).toFixed(2));
 }

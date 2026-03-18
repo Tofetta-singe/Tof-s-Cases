@@ -58,6 +58,7 @@ export function DropReveal({
   const revealAudioRef = useRef(null);
   const tickIndexRef = useRef(0);
   const animationRef = useRef(null);
+  const activeRevealIdRef = useRef("");
   const trackX = useMotionValue(0);
 
   const reward = opening?.reward || null;
@@ -101,10 +102,17 @@ export function DropReveal({
   }, []);
 
   useEffect(() => {
-    if (!reward || !items.length || !viewportRef.current) {
+    const revealId = opening?.revealId || reward?.itemId || "";
+
+    if (!reward || !items.length || !viewportRef.current || !revealId) {
       return undefined;
     }
 
+    if (activeRevealIdRef.current === revealId) {
+      return undefined;
+    }
+
+    activeRevealIdRef.current = revealId;
     animationRef.current?.stop?.();
     setPhase("spinning");
 
@@ -147,7 +155,7 @@ export function DropReveal({
       unsubscribe();
       animationRef.current?.stop?.();
     };
-  }, [reward, items, winnerIndex, opening?.reel?.durationMs, cardWidth, trackX, onRevealEnd, volume]);
+  }, [opening?.revealId, reward, items, winnerIndex, opening?.reel?.durationMs, cardWidth, trackX, onRevealEnd, volume]);
 
   const trackWidth = items.length ? items.length * cardWidth + Math.max(items.length - 1, 0) * GAP : 0;
 
@@ -162,16 +170,22 @@ export function DropReveal({
           className="cs-panel rounded-[18px] px-5 py-5 md:px-6"
         >
           <div className="text-center">
-            <h2 className="text-[28px] font-bold leading-tight text-white md:text-[34px]">
-              {rewardTitleParts.weapon}
-              {rewardTitleParts.skin ? (
-                <>
-                  {" | "}
-                  <span style={{ color: rewardRarityColor }}>{rewardTitleParts.skin}</span>
-                </>
-              ) : null}
-              <span className="text-slate-300"> ({reward.wear})</span>
-            </h2>
+            {phase === "settled" ? (
+              <h2 className="text-[28px] font-bold leading-tight text-white md:text-[34px]">
+                {rewardTitleParts.weapon}
+                {rewardTitleParts.skin ? (
+                  <>
+                    {" | "}
+                    <span style={{ color: rewardRarityColor }}>{rewardTitleParts.skin}</span>
+                  </>
+                ) : null}
+                <span className="text-slate-300"> ({reward.wear})</span>
+              </h2>
+            ) : (
+              <h2 className="text-[28px] font-bold leading-tight text-slate-200 md:text-[34px]">
+                Opening Case...
+              </h2>
+            )}
           </div>
 
           <div className="mt-4 overflow-hidden rounded-[6px] border border-white/12 bg-[rgba(90,92,97,0.55)] p-3">
@@ -220,24 +234,28 @@ export function DropReveal({
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => onSellReward?.(reward.itemId)}
-              disabled={busy || phase !== "settled"}
-              className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-6 py-2 text-lg font-semibold text-[#88ff7b] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
-            >
-              Sell for {currency(reward.sellPrice)}
-            </button>
-            <button
-              type="button"
-              onClick={() => onReroll?.(reward.crateId)}
-              disabled={busy || phase !== "settled"}
-              className="rounded-[10px] border border-[#3e8fd3] bg-[linear-gradient(180deg,#3d4c59_0%,#32404e_100%)] px-8 py-2 text-lg font-semibold text-[#d9e5ef] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
-            >
-              Reroll
-            </button>
-          </div>
+          {phase === "settled" ? (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => onSellReward?.(reward.itemId)}
+                disabled={busy}
+                className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-6 py-2 text-lg font-semibold text-[#88ff7b] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
+              >
+                Sell for {currency(reward.sellPrice)}
+              </button>
+              <button
+                type="button"
+                onClick={() => onReroll?.(reward.crateId)}
+                disabled={busy}
+                className="rounded-[10px] border border-[#3e8fd3] bg-[linear-gradient(180deg,#3d4c59_0%,#32404e_100%)] px-8 py-2 text-lg font-semibold text-[#d9e5ef] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
+              >
+                Reroll
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 h-[52px]" />
+          )}
         </motion.section>
       ) : null}
     </AnimatePresence>
