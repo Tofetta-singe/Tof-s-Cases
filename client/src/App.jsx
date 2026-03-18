@@ -78,7 +78,7 @@ function splitIntoColumns(items, columnsCount) {
   return columns;
 }
 
-function SettingsPanel({ authStatus, dashboard, loginWithDiscord, logout }) {
+function SettingsPanel({ authStatus, dashboard, loginWithDiscord, logout, volume, setVolume }) {
   return (
     <section className="cs-panel rounded-[18px] p-5">
       <h3 className="text-[28px] font-bold uppercase text-white">Settings</h3>
@@ -109,6 +109,21 @@ function SettingsPanel({ authStatus, dashboard, loginWithDiscord, logout }) {
           </button>
         )}
       </div>
+      <div className="mt-6 max-w-md">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-lg font-semibold text-white">Volume</span>
+          <span className="text-lg text-slate-200">{Math.round(volume * 100)}%</span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value={Math.round(volume * 100)}
+          onChange={(event) => setVolume(Number(event.target.value) / 100)}
+          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/20 accent-[#7cc3ff]"
+        />
+      </div>
     </section>
   );
 }
@@ -122,11 +137,20 @@ export default function App() {
   const [sellingItemId, setSellingItemId] = useState("");
   const [selectedTradeUp, setSelectedTradeUp] = useState([]);
   const [selectedView, setSelectedView] = useState("crates");
+  const [volume, setVolume] = useState(() => {
+    const storedValue = window.localStorage.getItem("tof-volume");
+    const numericValue = Number(storedValue);
+    return Number.isFinite(numericValue) ? Math.min(Math.max(numericValue, 0), 1) : 0.35;
+  });
   const [authStatus, setAuthStatus] = useState({
     loading: true,
     authenticated: false,
     discordEnabled: false
   });
+
+  useEffect(() => {
+    window.localStorage.setItem("tof-volume", String(volume));
+  }, [volume]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -373,6 +397,7 @@ export default function App() {
           <DropReveal
             opening={opening}
             busy={isBusy || Boolean(sellingItemId)}
+            volume={volume}
             onRevealEnd={() => setIsBusy(false)}
             onSellReward={sellItem}
             onReroll={rerollCase}
@@ -522,6 +547,8 @@ export default function App() {
               dashboard={dashboard}
               loginWithDiscord={loginWithDiscord}
               logout={logout}
+              volume={volume}
+              setVolume={setVolume}
             />
           </div>
         ) : null}
