@@ -376,11 +376,11 @@ export default function App() {
     }
   }
 
-  if (loading) {
+  if (loading && !data) {
     return <div className="min-h-screen p-6 text-white">Loading...</div>;
   }
 
-  if (error) {
+  if (error && !data) {
     return <div className="min-h-screen p-6 text-red-200">{error}</div>;
   }
 

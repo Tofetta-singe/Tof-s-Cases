@@ -11,7 +11,11 @@ export function useDashboard(refreshKey) {
   useEffect(() => {
     let ignore = false;
 
-    setState((current) => ({ ...current, loading: true, error: "" }));
+    setState((current) => ({
+      ...current,
+      loading: !current.data,
+      error: ""
+    }));
 
     api("/dashboard")
       .then((data) => {
@@ -21,7 +25,11 @@ export function useDashboard(refreshKey) {
       })
       .catch((error) => {
         if (!ignore) {
-          setState({ loading: false, error: error.message, data: null });
+          setState((current) => ({
+            loading: false,
+            error: error.message,
+            data: current.data
+          }));
         }
       });
 
