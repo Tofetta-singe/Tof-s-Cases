@@ -1,17 +1,19 @@
+import { getOfficialCaseMarketPriceByName } from "../data/caseCatalog.js";
+
 const rarityBasePrice = {
-  Consumer: [0.08, 0.55],
-  Industrial: [0.2, 1.3],
-  "Mil-Spec": [0.45, 5],
-  Restricted: [1.5, 16],
-  Classified: [7, 55],
-  Covert: [35, 280],
-  Contraband: [90, 700],
-  Extraordinary: [140, 1200]
+  Consumer: [0.03, 0.45],
+  Industrial: [0.06, 0.85],
+  "Mil-Spec": [0.18, 3.8],
+  Restricted: [0.7, 11],
+  Classified: [2.8, 36],
+  Covert: [12, 180],
+  "Special Rare": [140, 1800],
+  Contraband: [180, 2200]
 };
 
 const categoryMultiplier = {
-  Gloves: 3.6,
-  Knives: 4.2,
+  Gloves: 2.6,
+  Knives: 3.1,
   Pistols: 0.9,
   SMGs: 1,
   Rifles: 1.45,
@@ -42,7 +44,30 @@ function resolveCategoryMultiplier(categoryName = "", weaponName = "") {
   return categoryMultiplier.SMGs;
 }
 
-export function estimateBasePrice(skin) {
+function getCaseMultiplier(caseName = "") {
+  const casePrice = getOfficialCaseMarketPriceByName(caseName);
+  if (!casePrice) {
+    return 1;
+  }
+
+  return Math.max(0.9, Math.sqrt(casePrice / 0.5));
+}
+
+function getFinishMultiplier(skin) {
+  const source = `${skin.name || ""} ${skin.pattern?.name || ""}`;
+
+  if (/fade|doppler|gamma doppler|marble fade|slaughter|case hardened|crimson web/i.test(source)) {
+    return 1.75;
+  }
+
+  if (/printstream|vulcan|neo-noir|asiimov|hyper beast|temukau|kill confirmed/i.test(source)) {
+    return 1.35;
+  }
+
+  return 1;
+}
+
+export function estimateBasePrice(skin, caseName = "") {
   const rarityName = skin.rarity?.name || "Mil-Spec";
   const [min, max] = rarityBasePrice[rarityName] || rarityBasePrice["Mil-Spec"];
   const spreadSeed = (Number.parseInt(String(skin.paint_index || 11), 10) % 100) / 100;
@@ -51,14 +76,18 @@ export function estimateBasePrice(skin) {
     skin.category?.name,
     skin.weapon?.name || skin.name
   );
-  return Number((base * multiplier).toFixed(2));
+  const caseMultiplier = getCaseMultiplier(caseName);
+  const finishMultiplier = getFinishMultiplier(skin);
+  const souvenirMultiplier = skin.souvenir ? 1.12 : 1;
+
+  return Number((base * multiplier * caseMultiplier * finishMultiplier * souvenirMultiplier).toFixed(2));
 }
 
 export function applyFloatPrice(basePrice, floatValue) {
-  const wearMultiplier = Math.max(0.72, 1.14 - floatValue * 0.48);
+  const wearMultiplier = Math.max(0.58, 1.24 - floatValue * 0.66);
   return Number((basePrice * wearMultiplier).toFixed(2));
 }
 
 export function getSellPrice(realPrice) {
-  return Number((realPrice * 0.7).toFixed(2));
+  return Number((realPrice * 0.85).toFixed(2));
 }

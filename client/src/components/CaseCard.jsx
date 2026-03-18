@@ -1,5 +1,9 @@
 import { motion } from "framer-motion";
 
+function currency(value) {
+  return `${Number(value || 0).toFixed(2)} \u20ac`;
+}
+
 export function CaseCard({ item, onOpen, disabled }) {
   return (
     <motion.button
@@ -26,9 +30,9 @@ export function CaseCard({ item, onOpen, disabled }) {
         ) : null}
       </div>
       <div className="mt-6 flex items-center justify-between">
-        <span className="text-sm text-slate-400">Server-side odds</span>
+        <span className="text-sm text-slate-400">Valve odds</span>
         <span className="rounded-full bg-amber-400 px-3 py-1 text-sm font-semibold text-slate-950">
-          {item.price === 0 ? "FREE" : `$${item.price.toFixed(2)}`}
+          {item.price === 0 ? "FREE" : currency(item.price)}
         </span>
       </div>
     </motion.button>

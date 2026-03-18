@@ -1,4 +1,15 @@
-export function InventoryGrid({ inventory = [], selectedIds = [], onToggle }) {
+function currency(value) {
+  return `${Number(value || 0).toFixed(2)} \u20ac`;
+}
+
+export function InventoryGrid({
+  inventory = [],
+  selectedIds = [],
+  onToggle,
+  onSell,
+  sellingItemId,
+  disableActions
+}) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {inventory.map((item) => {
@@ -28,7 +39,23 @@ export function InventoryGrid({ inventory = [], selectedIds = [], onToggle }) {
                 <p className="mt-2 text-xs text-slate-400">
                   {item.wear} • {item.float.toFixed(4)}
                 </p>
-                <p className="mt-2 text-sm text-white">${item.price.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Pattern #{item.patternSeed} • {item.patternName}
+                </p>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className="text-sm text-white">{currency(item.price)}</p>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSell?.(item.itemId);
+                    }}
+                    disabled={disableActions || sellingItemId === item.itemId}
+                    className="rounded-full border border-emerald-300/30 px-3 py-1 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+                  >
+                    {sellingItemId === item.itemId ? "Vente..." : `Vendre ${currency(item.sellPrice)}`}
+                  </button>
+                </div>
               </div>
             </div>
           </button>

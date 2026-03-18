@@ -3,6 +3,10 @@ import { motion } from "framer-motion";
 import { socket } from "../lib/socket";
 import { api } from "../lib/api";
 
+function currency(value) {
+  return `${Number(value || 0).toFixed(2)} \u20ac`;
+}
+
 export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRefresh }) {
   const [selectedCases, setSelectedCases] = useState([]);
   const [activeBattle, setActiveBattle] = useState(null);
@@ -103,7 +107,7 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-white">{item.name}</span>
-                  <span className="text-sm text-slate-400">${item.price.toFixed(2)}</span>
+                  <span className="text-sm text-slate-400">{currency(item.price)}</span>
                 </div>
               </button>
             );
@@ -164,7 +168,7 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
                     </p>
                   </div>
                 </div>
-                <span className="text-white">${player.totalValue?.toFixed?.(2) || "0.00"}</span>
+                <span className="text-white">{currency(player.totalValue)}</span>
               </div>
             </div>
           ))}
@@ -183,9 +187,7 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
                 {round.drops.map((drop) => (
                   <div key={drop.userId} className="flex items-center justify-between gap-4">
                     <span className="text-sm text-slate-300">{drop.username}</span>
-                    <span className="text-sm text-white">
-                      {drop.reward.name} • ${drop.reward.price.toFixed(2)}
-                    </span>
+                    <span className="text-sm text-white">{drop.reward.name} • {currency(drop.reward.price)}</span>
                   </div>
                 ))}
               </div>
@@ -196,9 +198,7 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
         {winner ? (
           <div className="mt-6 rounded-3xl border border-amber-300/25 bg-amber-300/10 p-4">
             <p className="text-xs uppercase tracking-[0.28em] text-amber-300">Victory</p>
-            <p className="mt-2 text-xl font-semibold text-white">
-              {winner.username} won ${winner.totalValue.toFixed(2)}
-            </p>
+            <p className="mt-2 text-xl font-semibold text-white">{winner.username} won {currency(winner.totalValue)}</p>
           </div>
         ) : null}
       </div>

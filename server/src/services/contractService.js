@@ -1,6 +1,5 @@
-import { randomFloat, randomItem, createId } from "../utils/random.js";
-import { getWearTier } from "../utils/wear.js";
-import { applyFloatPrice, getSellPrice } from "./pricingService.js";
+import { randomItem } from "../utils/random.js";
+import { createInventoryItemFromSkin } from "./caseService.js";
 import { getSkinsByRarity, getUpgradeRarity } from "./skinService.js";
 
 export function resolveTradeUp(items) {
@@ -14,25 +13,11 @@ export function resolveTradeUp(items) {
   }
 
   const nextRarity = getUpgradeRarity(rarity);
-  if (!nextRarity) {
+  if (!nextRarity || nextRarity === "Special Rare") {
     throw new Error("Selected rarity cannot be upgraded");
   }
 
   const pool = getSkinsByRarity(nextRarity);
   const skin = randomItem(pool);
-  const floatValue = randomFloat(skin.min_float ?? 0, skin.max_float ?? 1);
-  const price = applyFloatPrice(skin.basePrice, floatValue);
-
-  return {
-    itemId: createId("itm"),
-    skinId: skin.id,
-    crateId: skin.crates?.[0]?.id || "trade-up",
-    name: skin.name,
-    image: skin.image,
-    rarity: skin.rarity,
-    float: floatValue,
-    wear: getWearTier(floatValue),
-    price,
-    sellPrice: getSellPrice(price)
-  };
+  return createInventoryItemFromSkin(skin, skin.crates?.[0]?.id || "trade-up");
 }

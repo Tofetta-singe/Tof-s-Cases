@@ -1,11 +1,12 @@
 import { createId, randomFloat, randomItem, weightedRandom } from "../utils/random.js";
 import { getWearTier } from "../utils/wear.js";
 import { applyFloatPrice, getSellPrice } from "./pricingService.js";
-import { getCaseById, getRarityWeight, getSkinsByRarity } from "./skinService.js";
+import { getCaseById, getFreeDailyPool, getRarityWeight } from "./skinService.js";
 
 function buildDrop(skin, caseId) {
   const floatValue = randomFloat(skin.min_float ?? 0, skin.max_float ?? 1);
   const realPrice = applyFloatPrice(skin.basePrice, floatValue);
+  const patternSeed = Math.floor(Math.random() * 1000) + 1;
 
   return {
     itemId: createId("itm"),
@@ -16,15 +17,17 @@ function buildDrop(skin, caseId) {
     rarity: skin.rarity,
     float: floatValue,
     wear: getWearTier(floatValue),
+    patternName: skin.pattern?.name || "Default",
+    patternSeed,
     price: realPrice,
     sellPrice: getSellPrice(realPrice)
   };
 }
 
-export function openConfiguredCase(caseId) {
+function pickFromCasePool(caseId) {
   if (caseId === "free-daily-case") {
-    const freePool = getSkinsByRarity("Mil-Spec");
-    return buildDrop(randomItem(freePool), caseId);
+    const freePool = getFreeDailyPool();
+    return randomItem(freePool);
   }
 
   const caseData = getCaseById(caseId);
@@ -41,12 +44,78 @@ export function openConfiguredCase(caseId) {
     byRarity.get(rarityName).push(skin);
   }
 
-  const weightedRarities = [...byRarity.entries()].map(([rarityName, skins]) => ({
-    rarityName,
-    skins,
-    weight: getRarityWeight(rarityName)
-  }));
+  const weightedRarities = [...byRarity.entries()]
+    .map(([rarityName, skins]) => ({
+      rarityName,
+      skins,
+      weight: getRarityWeight(rarityName)
+    }))
+    .filter((entry) => entry.weight > 0);
 
   const selectedBucket = weightedRandom(weightedRarities);
-  return buildDrop(randomItem(selectedBucket.skins), caseId);
+  return randomItem(selectedBucket.skins);
+}
+
+function buildOpeningReel(caseId, reward, length = 46) {
+  const reel = [];
+  const winnerIndex = length - 4;
+
+  for (let index = 0; index < length; index += 1) {
+    const skin = index === winnerIndex ? reward : buildDrop(pickFromCasePool(caseId), caseId);
+    reel.push({
+      itemId: `${skin.itemId || skin.skinId}-${index}`,
+      name: skin.name,
+      image: skin.image,
+      rarity: skin.rarity
+    });
+  }
+
+  for (let offset = 1; offset <= 3; offset += 1) {
+    const targetIndex = winnerIndex - offset;
+    if (targetIndex <= 0) {
+      continue;
+    }
+
+    const suspenseRarity =
+      offset === 1 ? "Special Rare" : offset === 2 ? "Covert" : "Classified";
+    const caseData = getCaseById(caseId);
+    const suspensePool =
+      caseId === "free-daily-case"
+        ? getFreeDailyPool().filter((item) => item.rarity?.name === "Mil-Spec")
+        : caseData?.skins.filter((item) => item.rarity?.name === suspenseRarity);
+
+    if (suspensePool?.length) {
+      const skin = randomItem(suspensePool);
+      reel[targetIndex] = {
+        itemId: `${skin.id}-${targetIndex}`,
+        name: skin.name,
+        image: skin.image,
+        rarity: skin.rarity
+      };
+    }
+  }
+
+  return {
+    durationMs: 5000,
+    winnerIndex,
+    itemWidth: 132,
+    items: reel
+  };
+}
+
+export function createInventoryItemFromSkin(skin, caseId) {
+  return buildDrop(skin, caseId);
+}
+
+export function openConfiguredCase(caseId) {
+  return buildDrop(pickFromCasePool(caseId), caseId);
+}
+
+export function previewConfiguredCase(caseId) {
+  const reward = openConfiguredCase(caseId);
+
+  return {
+    reward,
+    reel: buildOpeningReel(caseId, reward)
+  };
 }

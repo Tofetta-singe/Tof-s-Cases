@@ -23,7 +23,7 @@ function buildSeededUser(discordId, username = "Guest Dropper") {
     discordId,
     username,
     avatar: `https://api.dicebear.com/9.x/thumbs/svg?seed=${discordId}`,
-    balance: 250,
+    balance: 0,
     totalInventoryValue: 0,
     inventory: [],
     lastFreeCaseAt: null
@@ -84,6 +84,16 @@ export async function removeInventoryItems(discordId, itemIds) {
   }
 
   user.inventory = user.inventory.filter((item) => !itemIds.includes(item.itemId));
+  return saveUser(user);
+}
+
+export async function updateUserBalance(discordId, delta) {
+  const user = await getUserById(discordId);
+  if (!user) {
+    return null;
+  }
+
+  user.balance = Number(((user.balance || 0) + delta).toFixed(2));
   return saveUser(user);
 }
 

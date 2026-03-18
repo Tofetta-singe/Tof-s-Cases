@@ -1,5 +1,9 @@
 import { motion } from "framer-motion";
 
+function currency(value) {
+  return `${Number(value || 0).toFixed(2)} \u20ac`;
+}
+
 export function LiveFeed({ feed = [] }) {
   return (
     <div className="overflow-hidden rounded-full border border-amber-300/20 bg-black/30 px-4 py-3 shadow-neon">
@@ -15,8 +19,7 @@ export function LiveFeed({ feed = [] }) {
           >
             <span className="h-2 w-2 rounded-full bg-amber-300" />
             <span className="text-sm text-slate-200">
-              {event.username} dropped <strong>{event.reward?.name}</strong> for $
-              {event.reward?.price?.toFixed?.(2) || "0.00"}
+              {event.username} dropped <strong>{event.reward?.name}</strong> for {currency(event.reward?.price)}
             </span>
           </div>
         ))}

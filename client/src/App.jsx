@@ -10,13 +10,16 @@ import { InventoryGrid } from "./components/InventoryGrid";
 import { BattlePanel } from "./components/BattlePanel";
 
 function currency(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
+  return `${Number(value || 0).toFixed(2)} \u20ac`;
 }
 
 export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { loading, error, data } = useDashboard(refreshKey);
-  const [reward, setReward] = useState(null);
+  const [opening, setOpening] = useState(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [sellingItemId, setSellingItemId] = useState("");
   const [selectedTradeUp, setSelectedTradeUp] = useState([]);
   const [authStatus, setAuthStatus] = useState({
     loading: true,
@@ -89,12 +92,23 @@ export default function App() {
   );
 
   async function openCase(item) {
-    const result = await api("/cases/open", {
-      method: "POST",
-      body: JSON.stringify({ caseId: item.id })
-    });
-    setReward(result.reward);
-    setRefreshKey((value) => value + 1);
+    setActionError("");
+    setIsBusy(true);
+
+    try {
+      const result = await api("/cases/open", {
+        method: "POST",
+        body: JSON.stringify({ caseId: item.id })
+      });
+      setOpening({
+        ...result,
+        revealId: `${result.reward.itemId}-${Date.now()}`
+      });
+      setRefreshKey((value) => value + 1);
+    } catch (requestError) {
+      setActionError(requestError.message);
+      setIsBusy(false);
+    }
   }
 
   async function runTradeUp() {
@@ -102,13 +116,42 @@ export default function App() {
       return;
     }
 
-    const result = await api("/contracts/trade-up", {
-      method: "POST",
-      body: JSON.stringify({ itemIds: selectedTradeUp })
-    });
-    setReward(result.reward);
-    setSelectedTradeUp([]);
-    setRefreshKey((value) => value + 1);
+    setActionError("");
+    setIsBusy(true);
+
+    try {
+      const result = await api("/contracts/trade-up", {
+        method: "POST",
+        body: JSON.stringify({ itemIds: selectedTradeUp })
+      });
+      setOpening({
+        reward: result.reward,
+        revealId: `${result.reward.itemId}-${Date.now()}`
+      });
+      setSelectedTradeUp([]);
+      setRefreshKey((value) => value + 1);
+    } catch (requestError) {
+      setActionError(requestError.message);
+      setIsBusy(false);
+    }
+  }
+
+  async function sellItem(itemId) {
+    setActionError("");
+    setSellingItemId(itemId);
+
+    try {
+      await api("/inventory/sell", {
+        method: "POST",
+        body: JSON.stringify({ itemId })
+      });
+      setSelectedTradeUp((current) => current.filter((id) => id !== itemId));
+      setRefreshKey((value) => value + 1);
+    } catch (requestError) {
+      setActionError(requestError.message);
+    } finally {
+      setSellingItemId("");
+    }
   }
 
   async function loginWithDiscord() {
@@ -155,7 +198,7 @@ export default function App() {
                   {
                     id: "seed-1",
                     username: "Tof",
-                    reward: { name: "★ Karambit Doppler", price: 1420 }
+                    reward: { name: "★ Karambit | Doppler", price: 1420 }
                   }
                 ]
           }
@@ -203,6 +246,9 @@ export default function App() {
                   ? "Authenticated session active. Inventory and battles resolve to your Discord account."
                   : "No Discord session detected. The app stays usable in local demo mode until OAuth is configured."}
               </p>
+              <p className="mt-3 text-sm text-slate-400">
+                Probabilités Valve: Bleu 79.92%, Violet 15.98%, Rose 3.2%, Rouge 0.64%, Or 0.26%.
+              </p>
             </div>
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="grid gap-4">
               <StatCard label="Balance" value={currency(dashboard.user.balance)} />
@@ -216,18 +262,37 @@ export default function App() {
         </header>
 
         <div className="mt-8 grid gap-8">
-          <DropReveal reward={reward} />
+          {actionError ? (
+            <div className="rounded-3xl border border-red-400/25 bg-red-400/10 px-5 py-4 text-sm text-red-100">
+              {actionError}
+            </div>
+          ) : null}
+
+          <DropReveal
+            opening={opening}
+            onRevealEnd={() => {
+              setIsBusy(false);
+            }}
+          />
 
           <section>
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.32em] text-slate-400">Cases</p>
-                <h2 className="mt-2 text-3xl font-semibold text-white">Open your next hit</h2>
+                <h2 className="mt-2 text-3xl font-semibold text-white">Catalogue officiel CS</h2>
               </div>
             </div>
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {dashboard.cases.map((item) => (
-                <CaseCard key={item.id} item={item} onOpen={openCase} />
+                <CaseCard
+                  key={item.id}
+                  item={item}
+                  onOpen={openCase}
+                  disabled={
+                    isBusy ||
+                    (!item.daily && Number(dashboard.user.balance || 0) < Number(item.price || 0))
+                  }
+                />
               ))}
             </div>
           </section>
@@ -250,7 +315,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={runTradeUp}
-                  disabled={selectedTradeUp.length !== 10}
+                  disabled={selectedTradeUp.length !== 10 || isBusy}
                   className="rounded-full bg-emerald-300 px-5 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
                 >
                   Trade Up 10/10
@@ -263,6 +328,9 @@ export default function App() {
                 <InventoryGrid
                   inventory={dashboard.user.inventory}
                   selectedIds={selectedTradeUp}
+                  onSell={sellItem}
+                  sellingItemId={sellingItemId}
+                  disableActions={isBusy}
                   onToggle={(itemId) =>
                     setSelectedTradeUp((current) =>
                       current.includes(itemId)

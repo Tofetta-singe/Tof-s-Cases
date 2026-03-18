@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { openConfiguredCase } from "../services/caseService.js";
+import { previewConfiguredCase } from "../services/caseService.js";
 import { resolveTradeUp } from "../services/contractService.js";
 import { resolveUserFromToken } from "../services/authService.js";
 import { getFeed, pushFeedEvent } from "../services/feedService.js";
@@ -9,7 +9,8 @@ import {
   getOrCreateUser,
   getUserById,
   removeInventoryItems,
-  saveUser
+  saveUser,
+  updateUserBalance
 } from "../services/inventoryService.js";
 import { listBattles } from "../services/battleService.js";
 import { getCases, getDailyFreeCase } from "../services/skinService.js";
@@ -42,7 +43,7 @@ gameRouter.get("/dashboard", async (req, res) => {
   const battles = await listBattles();
   res.json({
     user,
-    cases: [...getCases().slice(0, 15), getDailyFreeCase()],
+    cases: [...getCases(), getDailyFreeCase()],
     feed: getFeed(),
     leaderboard: await getLeaderboard(),
     battles: battles.slice(0, 8)
@@ -53,7 +54,6 @@ gameRouter.post("/cases/open", async (req, res, next) => {
   try {
     const user = await resolveRequestUser(req);
     const { caseId } = req.body;
-    const reward = openConfiguredCase(caseId);
 
     if (caseId === "free-daily-case") {
       const lastDate = user.lastFreeCaseAt ? new Date(user.lastFreeCaseAt) : null;
@@ -69,8 +69,20 @@ gameRouter.post("/cases/open", async (req, res, next) => {
 
       user.lastFreeCaseAt = now.toISOString();
       await saveUser(user);
+    } else {
+      const availableCase = getCases().find((item) => item.id === caseId);
+      if (!availableCase) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+
+      if ((user.balance || 0) < availableCase.price) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+
+      await updateUserBalance(user.id, -availableCase.price);
     }
 
+    const { reward, reel } = previewConfiguredCase(caseId);
     await addInventoryItems(user.id, [reward]);
 
     if (reward.price >= 120) {
@@ -81,7 +93,7 @@ gameRouter.post("/cases/open", async (req, res, next) => {
       });
     }
 
-    return res.json({ reward });
+    return res.json({ reward, reel });
   } catch (error) {
     return next(error);
   }
@@ -99,6 +111,30 @@ gameRouter.post("/contracts/trade-up", async (req, res, next) => {
     await addInventoryItems(user.id, [reward]);
 
     return res.json({ reward });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+gameRouter.post("/inventory/sell", async (req, res, next) => {
+  try {
+    const user = await resolveRequestUser(req);
+    const { itemId } = req.body;
+    const ownedUser = await getUserById(user.id);
+    const item = ownedUser.inventory.find((entry) => entry.itemId === itemId);
+
+    if (!item) {
+      return res.status(404).json({ error: "Item not found" });
+    }
+
+    await removeInventoryItems(user.id, [itemId]);
+    const updatedUser = await updateUserBalance(user.id, item.sellPrice);
+
+    return res.json({
+      soldItemId: itemId,
+      credited: item.sellPrice,
+      balance: updatedUser.balance
+    });
   } catch (error) {
     return next(error);
   }
