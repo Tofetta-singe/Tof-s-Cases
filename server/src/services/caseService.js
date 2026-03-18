@@ -75,29 +75,25 @@ function buildOpeningReel(caseId, reward, length = 46) {
   }
 
   const suspenseCandidates = [
-    { offset: 1, rarity: "Covert", chance: 0.18 },
-    { offset: 2, rarity: "Classified", chance: 0.26 },
-    { offset: 3, rarity: "Restricted", chance: 0.34 }
+    { offset: 1, rarity: "Covert", weight: 1 },
+    { offset: 2, rarity: "Classified", weight: 2.4 },
+    { offset: 3, rarity: "Restricted", weight: 4.5 }
   ];
   const caseData = caseId === "free-daily-case" ? null : getCaseById(caseId);
+  const shouldAddSuspense =
+    caseId !== "free-daily-case" &&
+    !["Classified", "Covert", "Special Rare"].includes(reward.rarity?.name) &&
+    Math.random() < 0.14;
 
-  for (const candidate of suspenseCandidates) {
-    const targetIndex = winnerIndex - candidate.offset;
-    if (targetIndex <= 0 || Math.random() > candidate.chance) {
-      continue;
+  if (shouldAddSuspense) {
+    const selectedCandidate = weightedRandom(suspenseCandidates);
+    const targetIndex = winnerIndex - selectedCandidate.offset;
+    const suspensePool = caseData?.skins.filter((item) => item.rarity?.name === selectedCandidate.rarity);
+
+    if (targetIndex > 0 && suspensePool?.length) {
+      const skin = randomItem(suspensePool);
+      reel[targetIndex] = buildReelEntry(skin, targetIndex);
     }
-
-    const suspensePool =
-      caseId === "free-daily-case"
-        ? getFreeDailyPool().filter((item) => item.rarity?.name === "Mil-Spec")
-        : caseData?.skins.filter((item) => item.rarity?.name === candidate.rarity);
-
-    if (!suspensePool?.length) {
-      continue;
-    }
-
-    const skin = randomItem(suspensePool);
-    reel[targetIndex] = buildReelEntry(skin, targetIndex);
   }
 
   return {
