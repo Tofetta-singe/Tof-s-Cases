@@ -1,6 +1,4 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import skins from "../../../skins.json" with { type: "json" };
 import {
   FREE_DAILY_CASE_ID,
   FREE_DAILY_CASE_NAME,
@@ -9,12 +7,6 @@ import {
   isOfficialCaseName
 } from "../data/caseCatalog.js";
 import { estimateBasePrice } from "./pricingService.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const skinsPath = path.resolve(__dirname, "..", "..", "..", "skins.json");
-
-const skins = JSON.parse(fs.readFileSync(skinsPath, "utf8"));
 
 const rarityUpgradePath = [
   "Consumer",

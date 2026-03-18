@@ -14,11 +14,11 @@ function normalizeBaseUrl(value) {
 
 const defaults = {
   PORT: "4000",
-  SERVER_URL: "https://tof-s-cases.onrender.com/api/auth/callback",
-  CLIENT_URL: "https://tof-s-cases-client.vercel.app/",
-  DISCORD_CLIENT_ID: "1483597725852237936",
-  DISCORD_CLIENT_SECRET: "8W7dohkMEJc0jUpgFQEFIuAjKmTh5KJ",
-  JWT_SECRET: "tofcasecoolsecret"
+  SERVER_URL: process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:4000",
+  CLIENT_URL: process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:5173",
+  DISCORD_CLIENT_ID: "",
+  DISCORD_CLIENT_SECRET: "",
+  JWT_SECRET: "change-me-in-vercel-env"
 };
 
 const serverUrl = normalizeBaseUrl(process.env.SERVER_URL || defaults.SERVER_URL);

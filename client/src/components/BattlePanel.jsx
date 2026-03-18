@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { socket } from "../lib/socket";
 import { api } from "../lib/api";
 
 function currency(value) {
@@ -14,24 +13,23 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
   const [winner, setWinner] = useState(null);
 
   useEffect(() => {
-    const onState = (battle) => setActiveBattle(battle);
-    const onRound = (round) => setRounds((current) => [...current, round]);
-    const onFinished = (result) => {
-      setActiveBattle(result.battle);
-      setWinner(result.winner);
-      onBattleRefresh?.();
-    };
+    if (!activeBattle?.roomId || activeBattle.status === "finished") {
+      return undefined;
+    }
 
-    socket.on("battle:state", onState);
-    socket.on("battle:round", onRound);
-    socket.on("battle:finished", onFinished);
+    const interval = window.setInterval(async () => {
+      try {
+        const { battle } = await api(`/battles/${activeBattle.roomId}`);
+        setActiveBattle(battle);
+      } catch {
+        // Keep the current UI state if polling fails temporarily.
+      }
+    }, 5000);
 
     return () => {
-      socket.off("battle:state", onState);
-      socket.off("battle:round", onRound);
-      socket.off("battle:finished", onFinished);
+      window.clearInterval(interval);
     };
-  }, [onBattleRefresh]);
+  }, [activeBattle?.roomId, activeBattle?.status]);
 
   const topCases = useMemo(() => cases.filter((item) => !item.daily).slice(0, 6), [cases]);
 
@@ -51,7 +49,6 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
     setActiveBattle(battle);
     setRounds([]);
     setWinner(null);
-    socket.emit("battle:subscribe", { roomId: battle.roomId });
     onBattleRefresh?.();
   }
 
@@ -60,7 +57,6 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
     setActiveBattle(battle);
     setRounds([]);
     setWinner(null);
-    socket.emit("battle:subscribe", { roomId });
     onBattleRefresh?.();
   }
 
@@ -69,9 +65,11 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
       return;
     }
 
-    setRounds([]);
-    setWinner(null);
-    socket.emit("battle:start", { roomId: activeBattle.roomId });
+    const result = await api(`/battles/${activeBattle.roomId}/start`, { method: "POST" });
+    setActiveBattle(result.battle);
+    setRounds(result.rounds || []);
+    setWinner(result.winner || null);
+    onBattleRefresh?.();
   }
 
   return (
@@ -145,7 +143,7 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
               {activeBattle ? activeBattle.roomId : "No active room"}
             </h3>
           </div>
-          {activeBattle?.players?.length >= 2 ? (
+          {activeBattle?.players?.length >= 2 && activeBattle?.status !== "finished" ? (
             <button
               onClick={startRoom}
               className="rounded-full bg-sky-400 px-5 py-3 text-sm font-semibold text-slate-950"

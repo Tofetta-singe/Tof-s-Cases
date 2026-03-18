@@ -6,25 +6,39 @@ import { authRouter } from "./routes/authRoutes.js";
 import { gameRouter } from "./routes/gameRoutes.js";
 import { battleRouter } from "./routes/battleRoutes.js";
 
-export function createApp() {
+function buildCorsOptions() {
+  const allowedOrigins = new Set(
+    [env.clientUrl, "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean)
+  );
+
+  return {
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (allowedOrigins.has(origin) || /\.vercel\.app$/i.test(new URL(origin).hostname)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Origin not allowed by CORS"));
+    },
+    credentials: true
+  };
+}
+
+export function createApiApp() {
   const app = express();
 
-app.use(
-    cors({
-      origin: [
-        "http://localhost:5173",                 // Ton PC (Vite)
-        "https://tof-s-cases-client.vercel.app", // Ton URL Vercel exacte
-        env.clientUrl                            // La variable que tu as mis dans ton .env
-      ],
-      credentials: true
-    })
-  );
+  app.use(cors(buildCorsOptions()));
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
 
-  app.use("/api/auth", authRouter);
-  app.use("/api", gameRouter);
-  app.use("/api/battles", battleRouter);
+  app.use("/auth", authRouter);
+  app.use("/", gameRouter);
+  app.use("/battles", battleRouter);
 
   app.use((error, _req, res, _next) => {
     res.status(500).json({
@@ -32,5 +46,11 @@ app.use(
     });
   });
 
+  return app;
+}
+
+export function createApp() {
+  const app = express();
+  app.use("/api", createApiApp());
   return app;
 }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createBattle, getBattle, joinBattle, startBattle } from "../services/battleService.js";
 import { resolveUserFromToken } from "../services/authService.js";
+import { pushFeedEvent } from "../services/feedService.js";
 import { getOrCreateUser } from "../services/inventoryService.js";
 
 export const battleRouter = Router();
@@ -50,6 +51,19 @@ battleRouter.post("/:roomId/join", async (req, res, next) => {
 battleRouter.post("/:roomId/start", async (req, res, next) => {
   try {
     const result = await startBattle(req.params.roomId);
+
+    if (result.winner.totalValue >= 150) {
+      pushFeedEvent({
+        type: "battle-win",
+        username: result.winner.username,
+        reward: {
+          name: "Battle Winnings",
+          price: result.winner.totalValue,
+          rarity: { color: "#f5c451" }
+        }
+      });
+    }
+
     return res.json(result);
   } catch (error) {
     return next(error);
