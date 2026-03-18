@@ -42,11 +42,11 @@ export default function App() {
       try {
         const [{ url }, me] = await Promise.allSettled([
           fetch(getAuthUrl()).then(async (response) => {
-            const data = await response.json();
+            const payload = await response.json();
             if (!response.ok) {
-              throw new Error(data.error || "Discord OAuth unavailable");
+              throw new Error(payload.error || "Discord OAuth unavailable");
             }
-            return data;
+            return payload;
           }),
           authApi("/me")
         ]);
@@ -156,11 +156,11 @@ export default function App() {
 
   async function loginWithDiscord() {
     const { url } = await fetch(getAuthUrl()).then(async (response) => {
-      const data = await response.json();
+      const payload = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Discord OAuth unavailable");
+        throw new Error(payload.error || "Discord OAuth unavailable");
       }
-      return data;
+      return payload;
     });
 
     window.location.href = url;
@@ -198,7 +198,7 @@ export default function App() {
                   {
                     id: "seed-1",
                     username: "Tof",
-                    reward: { name: "★ Karambit | Doppler", price: 1420 }
+                    reward: { name: "Karambit | Doppler", price: 1420 }
                   }
                 ]
           }
@@ -247,7 +247,7 @@ export default function App() {
                   : "No Discord session detected. The app stays usable in local demo mode until OAuth is configured."}
               </p>
               <p className="mt-3 text-sm text-slate-400">
-                Probabilités Valve: Bleu 79.92%, Violet 15.98%, Rose 3.2%, Rouge 0.64%, Or 0.26%.
+                Probabilites Valve: Bleu 79.92%, Violet 15.98%, Rose 3.2%, Rouge 0.64%, Or 0.26%.
               </p>
             </div>
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="grid gap-4">

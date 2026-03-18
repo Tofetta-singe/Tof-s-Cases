@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-const ITEM_WIDTH = 132;
 const BASIC_REVEAL_SOUND = "/sound_ui_item_drop_basic.wav";
 const LEGENDARY_REVEAL_SOUND = "/sound_ui_item_reveal5_legendary.wav";
 const SCROLL_SOUND = "/sound_ui_csgo_ui_crate_item_scroll.wav";
+const WINDOW_RADIUS = 3;
 
 function currency(value) {
   return `${Number(value || 0).toFixed(2)} \u20ac`;
@@ -25,117 +25,120 @@ function playAudio(audioRef, src) {
   audioRef.current.play().catch(() => {});
 }
 
+function getWindowItems(items = [], centerIndex = 0) {
+  const output = [];
+
+  for (let offset = -WINDOW_RADIUS; offset <= WINDOW_RADIUS; offset += 1) {
+    output.push(items[centerIndex + offset] || null);
+  }
+
+  return output;
+}
+
 export function DropReveal({ opening, onRevealEnd }) {
   const [phase, setPhase] = useState("idle");
+  const [cursorIndex, setCursorIndex] = useState(0);
   const scrollAudioRef = useRef(null);
   const revealAudioRef = useRef(null);
 
-  const trackOffset = useMemo(() => {
-    if (!opening?.reel) {
-      return 0;
-    }
-
-    const winnerIndex = opening.reel.winnerIndex ?? 0;
-    return -winnerIndex * (opening.reel.itemWidth || ITEM_WIDTH);
-  }, [opening]);
-
-  const suspenseWindow = useMemo(() => {
-    if (!opening?.reel?.items?.length) {
-      return [];
-    }
-
-    const winnerIndex = opening.reel.winnerIndex ?? 0;
-    return opening.reel.items.slice(Math.max(0, winnerIndex - 3), winnerIndex + 1);
-  }, [opening]);
+  const winnerIndex = opening?.reel?.winnerIndex ?? 0;
+  const visibleItems = useMemo(
+    () => getWindowItems(opening?.reel?.items, cursorIndex),
+    [opening?.reel?.items, cursorIndex]
+  );
 
   useEffect(() => {
     if (!opening?.reward) {
       return undefined;
     }
 
-    setPhase("spinning");
-
-    const scrollInterval = opening.reel
-      ? window.setInterval(() => {
-          playAudio(scrollAudioRef, SCROLL_SOUND);
-        }, 108)
-      : null;
-
-    const settleTimeout = window.setTimeout(() => {
-      if (scrollInterval) {
-        window.clearInterval(scrollInterval);
-      }
+    if (!opening.reel?.items?.length) {
       setPhase("settled");
-      playAudio(
-        revealAudioRef,
-        isHighValueRarity(opening.reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND
-      );
-      onRevealEnd?.();
-    }, opening.reel?.durationMs || 300);
+      const timeout = window.setTimeout(() => {
+        playAudio(
+          revealAudioRef,
+          isHighValueRarity(opening.reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND
+        );
+        onRevealEnd?.();
+      }, 250);
+
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    }
+
+    setPhase("spinning");
+    setCursorIndex(0);
+
+    const steps = Math.max(winnerIndex, 1);
+    const stepDelay = Math.max(70, Math.floor((opening.reel.durationMs || 5000) / steps));
+    let currentIndex = 0;
+
+    const interval = window.setInterval(() => {
+      currentIndex += 1;
+      setCursorIndex(Math.min(currentIndex, winnerIndex));
+      playAudio(scrollAudioRef, SCROLL_SOUND);
+
+      if (currentIndex >= winnerIndex) {
+        window.clearInterval(interval);
+        setPhase("settled");
+        playAudio(
+          revealAudioRef,
+          isHighValueRarity(opening.reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND
+        );
+        onRevealEnd?.();
+      }
+    }, stepDelay);
 
     return () => {
-      if (scrollInterval) {
-        window.clearInterval(scrollInterval);
-      }
-      window.clearTimeout(settleTimeout);
+      window.clearInterval(interval);
     };
-  }, [opening, onRevealEnd]);
+  }, [opening, onRevealEnd, winnerIndex]);
 
   return (
     <AnimatePresence>
       {opening?.reward ? (
         <motion.div
           key={opening.revealId || opening.reward.itemId}
-          initial={{ opacity: 0, y: 18, scale: 0.96 }}
+          initial={{ opacity: 0, y: 18, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0 }}
           className="rounded-[32px] border border-amber-400/25 bg-gradient-to-br from-amber-400/12 via-black/20 to-sky-400/10 p-6 shadow-neon"
         >
           <p className="text-xs uppercase tracking-[0.32em] text-amber-300">Case Reveal</p>
           {opening.reel ? (
-            <div
-              className={`mt-5 overflow-hidden rounded-[28px] border px-4 py-5 ${
-                phase === "spinning" && suspenseWindow.some((item) => isHighValueRarity(item.rarity?.name))
-                  ? "border-amber-300/50 bg-amber-300/8"
-                  : "border-white/10 bg-black/30"
-              }`}
-            >
-              <div className="relative">
+            <div className="mt-5 overflow-hidden rounded-[28px] border border-white/10 bg-black/30 px-4 py-5">
+              <div className="relative grid grid-cols-7 gap-3">
                 <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-full w-[3px] -translate-x-1/2 bg-amber-300 shadow-[0_0_24px_rgba(245,196,81,0.95)]" />
-                <motion.div
-                  initial={{ x: 0 }}
-                  animate={{ x: trackOffset }}
-                  transition={{
-                    duration: (opening.reel.durationMs || 5000) / 1000,
-                    ease: [0.08, 0.72, 0.16, 1]
-                  }}
-                  className={`flex gap-3 ${
-                    phase === "spinning" && suspenseWindow.some((item) => isHighValueRarity(item.rarity?.name))
-                      ? "animate-[pulse_0.45s_ease-in-out_infinite]"
-                      : ""
-                  }`}
-                >
-                  {opening.reel.items.map((item, index) => {
-                    const nearWinner =
-                      Math.abs(index - (opening.reel.winnerIndex ?? 0)) <= 2 &&
-                      isHighValueRarity(item.rarity?.name);
+                {visibleItems.map((item, index) => {
+                  const isCenter = index === WINDOW_RADIUS;
+                  const isDanger = item && isHighValueRarity(item.rarity?.name);
 
-                    return (
-                      <div
-                        key={item.itemId}
-                        className={`w-[120px] shrink-0 rounded-3xl border p-3 ${
-                          nearWinner ? "border-amber-300/50 bg-amber-300/12" : "border-white/8 bg-white/[0.04]"
-                        }`}
-                      >
-                        <img src={item.image} alt={item.name} className="mx-auto h-16 w-16 object-contain" />
-                        <p className="mt-3 line-clamp-2 text-xs text-white">{item.name}</p>
-                        <p className="mt-1 text-[11px]" style={{ color: item.rarity.color }}>
-                          {item.rarity.name}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </motion.div>
+                  return (
+                    <div
+                      key={item?.itemId || `ghost-${index}`}
+                      className={`min-h-[150px] rounded-3xl border p-3 transition-all duration-100 ${
+                        isCenter
+                          ? "scale-[1.03] border-amber-300/60 bg-white/[0.08]"
+                          : "border-white/8 bg-white/[0.04]"
+                      } ${
+                        phase === "spinning" && isDanger && Math.abs(index - WINDOW_RADIUS) <= 1
+                          ? "shadow-[0_0_28px_rgba(245,196,81,0.35)]"
+                          : ""
+                      }`}
+                    >
+                      {item ? (
+                        <>
+                          <img src={item.image} alt={item.name} className="mx-auto h-16 w-16 object-contain" />
+                          <p className="mt-3 line-clamp-2 text-xs text-white">{item.name}</p>
+                          <p className="mt-1 text-[11px]" style={{ color: item.rarity.color }}>
+                            {item.rarity.name}
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}

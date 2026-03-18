@@ -9,7 +9,6 @@ import {
   getOrCreateUser,
   getUserById,
   removeInventoryItems,
-  saveUser,
   updateUserBalance
 } from "../services/inventoryService.js";
 import { listBattles } from "../services/battleService.js";
@@ -55,21 +54,7 @@ gameRouter.post("/cases/open", async (req, res, next) => {
     const user = await resolveRequestUser(req);
     const { caseId } = req.body;
 
-    if (caseId === "free-daily-case") {
-      const lastDate = user.lastFreeCaseAt ? new Date(user.lastFreeCaseAt) : null;
-      const now = new Date();
-      if (
-        lastDate &&
-        lastDate.getUTCFullYear() === now.getUTCFullYear() &&
-        lastDate.getUTCMonth() === now.getUTCMonth() &&
-        lastDate.getUTCDate() === now.getUTCDate()
-      ) {
-        return res.status(400).json({ error: "Daily free case already claimed" });
-      }
-
-      user.lastFreeCaseAt = now.toISOString();
-      await saveUser(user);
-    } else {
+    if (caseId !== "free-daily-case") {
       const availableCase = getCases().find((item) => item.id === caseId);
       if (!availableCase) {
         return res.status(404).json({ error: "Case not found" });
