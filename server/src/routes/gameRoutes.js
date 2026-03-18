@@ -152,3 +152,38 @@ gameRouter.post("/inventory/sell-all", async (req, res, next) => {
     return next(error);
   }
 });
+
+gameRouter.post("/inventory/sell-rarity", async (req, res, next) => {
+  try {
+    const user = await resolveRequestUser(req);
+    const { rarityName } = req.body;
+    const ownedUser = await getUserById(user.id);
+    const itemsToSell = ownedUser.inventory.filter((item) => (item.rarity?.name || "Unknown") === rarityName);
+
+    if (!itemsToSell.length) {
+      return res.json({
+        soldCount: 0,
+        credited: 0,
+        balance: ownedUser.balance,
+        rarityName
+      });
+    }
+
+    const itemIds = itemsToSell.map((item) => item.itemId);
+    const credited = Number(
+      itemsToSell.reduce((sum, item) => sum + Number(item.sellPrice || 0), 0).toFixed(2)
+    );
+
+    await removeInventoryItems(user.id, itemIds);
+    const updatedUser = await updateUserBalance(user.id, credited);
+
+    return res.json({
+      soldCount: itemsToSell.length,
+      credited,
+      balance: updatedUser.balance,
+      rarityName
+    });
+  } catch (error) {
+    return next(error);
+  }
+});

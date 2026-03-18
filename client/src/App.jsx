@@ -132,11 +132,13 @@ function SettingsPanel({ authStatus, dashboard, loginWithDiscord, logout, volume
 export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const { loading, error, data } = useDashboard(refreshKey);
+  const [dashboardState, setDashboardState] = useState(null);
   const [opening, setOpening] = useState(null);
   const [isBusy, setIsBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [sellingItemId, setSellingItemId] = useState("");
   const [sellingAll, setSellingAll] = useState(false);
+  const [sellingRarityName, setSellingRarityName] = useState("");
   const [selectedTradeUp, setSelectedTradeUp] = useState([]);
   const [selectedView, setSelectedView] = useState("crates");
   const [volume, setVolume] = useState(() => {
@@ -153,6 +155,12 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem("tof-volume", String(volume));
   }, [volume]);
+
+  useEffect(() => {
+    if (data) {
+      setDashboardState(data);
+    }
+  }, [data]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -211,7 +219,7 @@ export default function App() {
     };
   }, []);
 
-  const dashboard = data || {
+  const dashboard = dashboardState || data || {
     user: { inventory: [] },
     cases: [],
     leaderboard: [],
@@ -281,6 +289,13 @@ export default function App() {
     ];
   }, [dashboard.cases]);
 
+  function patchDashboard(updater) {
+    setDashboardState((current) => {
+      const base = current || data;
+      return base ? updater(base) : base;
+    });
+  }
+
   async function openCase(item) {
     setActionError("");
     setIsBusy(true);
@@ -294,6 +309,27 @@ export default function App() {
         ...result,
         revealId: `${result.reward.itemId}-${Date.now()}`
       });
+      patchDashboard((current) => ({
+        ...current,
+        user: {
+          ...current.user,
+          balance: Number(((current.user.balance || 0) - Number(item.price || 0)).toFixed(2)),
+          inventory: [...current.user.inventory, result.reward],
+          totalInventoryValue: Number(
+            ((current.user.totalInventoryValue || 0) + Number(result.reward.price || 0)).toFixed(2)
+          )
+        },
+        feed: [
+          {
+            id: `local-open-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            type: "case-open",
+            username: current.user.username,
+            reward: result.reward
+          },
+          ...current.feed
+        ].slice(0, 40)
+      }));
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
       setActionError(requestError.message);
@@ -327,6 +363,22 @@ export default function App() {
         reward: result.reward,
         revealId: `${result.reward.itemId}-${Date.now()}`
       });
+      patchDashboard((current) => {
+        const removedItems = current.user.inventory.filter((item) => selectedTradeUp.includes(item.itemId));
+        const remainingItems = current.user.inventory.filter((item) => !selectedTradeUp.includes(item.itemId));
+        const removedValue = removedItems.reduce((sum, item) => sum + Number(item.price || 0), 0);
+
+        return {
+          ...current,
+          user: {
+            ...current.user,
+            inventory: [...remainingItems, result.reward],
+            totalInventoryValue: Number(
+              ((current.user.totalInventoryValue || 0) - removedValue + Number(result.reward.price || 0)).toFixed(2)
+            )
+          }
+        };
+      });
       setSelectedTradeUp([]);
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
@@ -340,12 +392,26 @@ export default function App() {
     setSellingItemId(itemId);
 
     try {
-      await api("/inventory/sell", {
+      const result = await api("/inventory/sell", {
         method: "POST",
         body: JSON.stringify({ itemId })
       });
       setSelectedTradeUp((current) => current.filter((id) => id !== itemId));
       setOpening((current) => (current?.reward?.itemId === itemId ? null : current));
+      patchDashboard((current) => {
+        const soldItem = current.user.inventory.find((item) => item.itemId === itemId);
+        return {
+          ...current,
+          user: {
+            ...current.user,
+            balance: result.balance,
+            inventory: current.user.inventory.filter((item) => item.itemId !== itemId),
+            totalInventoryValue: Number(
+              ((current.user.totalInventoryValue || 0) - Number(soldItem?.price || 0)).toFixed(2)
+            )
+          }
+        };
+      });
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
       setActionError(requestError.message);
@@ -364,17 +430,68 @@ export default function App() {
     setSellingAll(true);
 
     try {
-      await api("/inventory/sell-all", {
+      const result = await api("/inventory/sell-all", {
         method: "POST"
       });
       setSelectedTradeUp([]);
       setOpening(null);
+      patchDashboard((current) => ({
+        ...current,
+        user: {
+          ...current.user,
+          balance: result.balance,
+          inventory: [],
+          totalInventoryValue: 0
+        }
+      }));
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
       setActionError(requestError.message);
     } finally {
       setSellingAll(false);
       setIsBusy(false);
+    }
+  }
+
+  async function sellByRarity(rarityName) {
+    setActionError("");
+    setSellingRarityName(rarityName);
+
+    try {
+      const result = await api("/inventory/sell-rarity", {
+        method: "POST",
+        body: JSON.stringify({ rarityName })
+      });
+
+      patchDashboard((current) => {
+        const remainingItems = current.user.inventory.filter(
+          (item) => (item.rarity?.name || "Unknown") !== rarityName
+        );
+
+        return {
+          ...current,
+          user: {
+            ...current.user,
+            balance: result.balance,
+            inventory: remainingItems,
+            totalInventoryValue: Number(
+              remainingItems.reduce((sum, item) => sum + Number(item.price || 0), 0).toFixed(2)
+            )
+          }
+        };
+      });
+
+      setSelectedTradeUp((currentSelected) =>
+        currentSelected.filter((itemId) => {
+          const entry = dashboard.user.inventory.find((item) => item.itemId === itemId);
+          return entry && (entry.rarity?.name || "Unknown") !== rarityName;
+        })
+      );
+      setRefreshKey((value) => value + 1);
+    } catch (requestError) {
+      setActionError(requestError.message);
+    } finally {
+      setSellingRarityName("");
     }
   }
 
@@ -641,7 +758,17 @@ export default function App() {
                           <span className="font-semibold" style={{ color: rarity.color }}>
                             {rarity.name}
                           </span>
-                          <span className="text-sm text-slate-300">{rarity.count} skins</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-300">{rarity.count} skins</span>
+                            <button
+                              type="button"
+                              onClick={() => sellByRarity(rarity.name)}
+                              disabled={isBusy || sellingAll || sellingRarityName === rarity.name}
+                              className="rounded-[10px] border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+                            >
+                              {sellingRarityName === rarity.name ? "Selling..." : "Sell"}
+                            </button>
+                          </div>
                         </div>
                         <div className="mt-2 h-2 rounded-full bg-white/8">
                           <div
@@ -703,7 +830,17 @@ export default function App() {
                           <span className="text-lg font-semibold" style={{ color: rarity.color }}>
                             {rarity.name}
                           </span>
-                          <span className="text-sm text-slate-300">{rarity.count}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-300">{rarity.count}</span>
+                            <button
+                              type="button"
+                              onClick={() => sellByRarity(rarity.name)}
+                              disabled={isBusy || sellingAll || sellingRarityName === rarity.name}
+                              className="rounded-[10px] border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+                            >
+                              {sellingRarityName === rarity.name ? "Selling..." : "Sell"}
+                            </button>
+                          </div>
                         </div>
                         <p className="mt-2 text-sm text-slate-400">Total value: {currency(rarity.value)}</p>
                         <div className="mt-3 h-2 rounded-full bg-white/8">
