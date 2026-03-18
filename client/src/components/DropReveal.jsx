@@ -31,15 +31,12 @@ function rarityShadow(rarityName = "") {
   if (rarityName === "Special Rare") {
     return "0 0 32px rgba(232, 198, 79, 0.45)";
   }
-
   if (rarityName === "Covert") {
     return "0 0 30px rgba(226, 83, 83, 0.35)";
   }
-
   if (rarityName === "Classified") {
     return "0 0 24px rgba(209, 91, 255, 0.25)";
   }
-
   return "none";
 }
 
@@ -58,6 +55,8 @@ export function DropReveal({
   const scrollAudioRef = useRef(null);
   const revealAudioRef = useRef(null);
   const activeRevealIdRef = useRef("");
+  
+  // Références pour les minuteurs
   const finishTimeoutRef = useRef(null);
   const scrollIntervalRef = useRef(null);
 
@@ -70,7 +69,6 @@ export function DropReveal({
     if (!reward?.name) {
       return { weapon: "", skin: "" };
     }
-
     const [weapon, skin] = reward.name.split(" | ");
     return {
       weapon: weapon || reward.name,
@@ -78,11 +76,9 @@ export function DropReveal({
     };
   }, [reward?.name]);
 
+  // Gestion responsive de la largeur des cartes
   useLayoutEffect(() => {
-    if (!viewportRef.current) {
-      return undefined;
-    }
-
+    if (!viewportRef.current) return undefined;
     const element = viewportRef.current;
 
     const updateSize = () => {
@@ -92,25 +88,32 @@ export function DropReveal({
     };
 
     updateSize();
-
     const observer = new ResizeObserver(updateSize);
     observer.observe(element);
 
+    return () => observer.disconnect();
+  }, []);
+
+  // NETTOYAGE SÉCURISÉ : On coupe les sons/timers uniquement quand on détruit le composant
+  useEffect(() => {
     return () => {
-      observer.disconnect();
+      if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
+      if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
     };
   }, []);
 
+  // LOGIQUE DE L'ANIMATION (Isolée des re-renders)
   useEffect(() => {
     const revealId = opening?.revealId || reward?.itemId || "";
     const duration = opening?.reel?.durationMs || 5000;
 
     if (!reward || !items.length || !viewportRef.current || !trackRef.current || !revealId) {
-      return undefined;
+      return;
     }
 
+    // Protection : Si l'animation de CE drop est déjà lancée, on annule pour ne pas la couper.
     if (activeRevealIdRef.current === revealId) {
-      return undefined;
+      return;
     }
 
     activeRevealIdRef.current = revealId;
@@ -118,37 +121,39 @@ export function DropReveal({
 
     const viewportWidth = viewportRef.current.clientWidth;
     const trackEl = trackRef.current;
-    const step = cardWidth + GAP;
-    const winnerCenter = winnerIndex * step + cardWidth / 2;
+    
+    // On recalcule ici la taille pour s'assurer que targetX est parfait
+    const currentCardWidth = Math.max(120, (viewportWidth - GAP * (VISIBLE_CARDS - 1)) / VISIBLE_CARDS);
+    const step = currentCardWidth + GAP;
+    
+    const winnerCenter = winnerIndex * step + currentCardWidth / 2;
     const targetX = viewportWidth / 2 - winnerCenter;
+    
     const startIndex = Math.max(2, Math.min(5, Math.max(items.length - VISIBLE_CARDS, 2)));
-    const startCenter = startIndex * step + cardWidth / 2;
+    const startCenter = startIndex * step + currentCardWidth / 2;
     const startX = viewportWidth / 2 - startCenter;
 
-    if (finishTimeoutRef.current) {
-      window.clearTimeout(finishTimeoutRef.current);
-    }
-    if (scrollIntervalRef.current) {
-      window.clearInterval(scrollIntervalRef.current);
-    }
-
+    // Reset de l'animation
     trackEl.style.transition = "none";
     trackEl.style.transform = `translate3d(${startX}px, 0, 0)`;
 
-    // Force layout so the browser commits the start position before animating.
+    // Force le navigateur à appliquer la position de départ avant d'animer
     void trackEl.offsetWidth;
 
+    // Lancement
     trackEl.style.transition = `transform ${duration}ms cubic-bezier(0.06, 0.88, 0.18, 1)`;
     trackEl.style.transform = `translate3d(${targetX}px, 0, 0)`;
 
+    // Son "clic-clic" de la roulette
+    if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
     scrollIntervalRef.current = window.setInterval(() => {
       playAudio(scrollAudioRef, SCROLL_SOUND, volume);
     }, 95);
 
+    // Fin de l'animation
+    if (finishTimeoutRef.current) clearTimeout(finishTimeoutRef.current);
     finishTimeoutRef.current = window.setTimeout(() => {
-      if (scrollIntervalRef.current) {
-        window.clearInterval(scrollIntervalRef.current);
-      }
+      if (scrollIntervalRef.current) window.clearInterval(scrollIntervalRef.current);
       setPhase("settled");
       playAudio(
         revealAudioRef,
@@ -158,15 +163,9 @@ export function DropReveal({
       onRevealEnd?.();
     }, duration);
 
-    return () => {
-      if (finishTimeoutRef.current) {
-        window.clearTimeout(finishTimeoutRef.current);
-      }
-      if (scrollIntervalRef.current) {
-        window.clearInterval(scrollIntervalRef.current);
-      }
-    };
-  }, [opening?.revealId, reward, items, winnerIndex, opening?.reel?.durationMs, cardWidth, onRevealEnd, volume]);
+    // ATTENTION : Pas de `return` de nettoyage ici, sinon React tue l'animation au moindre re-render !
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opening?.revealId]); // <-- Ne dépend QUE de l'ID pour ne pas s'interrompre
 
   const trackWidth = items.length ? items.length * cardWidth + Math.max(items.length - 1, 0) * GAP : 0;
 
@@ -214,15 +213,18 @@ export function DropReveal({
                 }}
               >
                 {items.map((item, index) => {
-                  const nearWinner = phase === "spinning" && Math.abs(index - winnerIndex) <= 2;
+                  // CORRECTION : Le skin gagnant reste illuminé à la fin (settled)
+                  const isWinner = index === winnerIndex;
+                  const isGlowing = (phase === "spinning" && Math.abs(index - winnerIndex) <= 2) || (phase === "settled" && isWinner);
 
                   return (
                     <div
                       key={item.itemId || `${item.name}-${index}`}
-                      className="relative h-[200px] shrink-0 overflow-hidden rounded-[2px] border border-black/25 bg-[linear-gradient(180deg,rgba(124,122,124,0.72)_0%,rgba(98,100,106,0.8)_72%,rgba(74,78,84,0.97)_100%)]"
+                      className="relative h-[200px] shrink-0 overflow-hidden rounded-[2px] border border-black/25 bg-[linear-gradient(180deg,rgba(124,122,124,0.72)_0%,rgba(98,100,106,0.8)_72%,rgba(74,78,84,0.97)_100%)] transition-shadow duration-300"
                       style={{
                         width: `${cardWidth}px`,
-                        boxShadow: nearWinner ? rarityShadow(item.rarity?.name) : "none"
+                        boxShadow: isGlowing ? rarityShadow(item.rarity?.name) : "none",
+                        zIndex: isWinner && phase === "settled" ? 10 : 1
                       }}
                     >
                       <div className="absolute inset-x-0 top-0 h-12 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_100%)]" />
@@ -231,8 +233,8 @@ export function DropReveal({
                         alt={item.name}
                         className="mx-auto mt-5 h-32 w-32 object-contain drop-shadow-[0_18px_24px_rgba(0,0,0,0.45)]"
                       />
-                      {nearWinner ? (
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12),transparent_60%)]" />
+                      {isGlowing ? (
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.12),transparent_60%)] pointer-events-none" />
                       ) : null}
                       <div
                         className="absolute bottom-0 left-0 h-[4px] w-full"
@@ -251,7 +253,7 @@ export function DropReveal({
                 type="button"
                 onClick={() => onSellReward?.(reward.itemId)}
                 disabled={busy}
-                className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-6 py-2 text-lg font-semibold text-[#88ff7b] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
+                className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-6 py-2 text-lg font-semibold text-[#88ff7b] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all"
               >
                 Sell for {currency(reward.sellPrice)}
               </button>
@@ -259,7 +261,7 @@ export function DropReveal({
                 type="button"
                 onClick={() => onReroll?.(reward.crateId)}
                 disabled={busy}
-                className="rounded-[10px] border border-[#3e8fd3] bg-[linear-gradient(180deg,#3d4c59_0%,#32404e_100%)] px-8 py-2 text-lg font-semibold text-[#d9e5ef] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
+                className="rounded-[10px] border border-[#3e8fd3] bg-[linear-gradient(180deg,#3d4c59_0%,#32404e_100%)] px-8 py-2 text-lg font-semibold text-[#d9e5ef] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all"
               >
                 Reroll
               </button>
