@@ -15,9 +15,43 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background: #0c1018;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(193, 212, 231, 0.35), transparent 26%),
+    radial-gradient(circle at 80% 0%, rgba(139, 165, 194, 0.35), transparent 24%),
+    radial-gradient(circle at 50% 100%, rgba(20, 25, 35, 0.9), transparent 35%),
+    linear-gradient(180deg, #7c8794 0%, #5d6772 28%, #28303a 68%, #1e232b 100%);
   color: white;
-  font-family: "Inter", sans-serif;
+  font-family: "Rajdhani", "Inter", sans-serif;
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.08), transparent 18%),
+    radial-gradient(circle at 15% 30%, rgba(255, 255, 255, 0.14), transparent 14%);
+  filter: blur(18px);
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+.cs-panel {
+  background: linear-gradient(180deg, rgba(88, 92, 100, 0.84) 0%, rgba(57, 61, 69, 0.92) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 30px rgba(0, 0, 0, 0.25);
+}
+
+.cs-top-box {
+  background: linear-gradient(180deg, rgba(91, 96, 103, 0.96) 0%, rgba(73, 78, 85, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 * {

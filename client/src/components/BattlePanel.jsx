@@ -22,7 +22,7 @@ export function BattlePanel({ battles = [], cases = [], currentUser, onBattleRef
         const { battle } = await api(`/battles/${activeBattle.roomId}`);
         setActiveBattle(battle);
       } catch {
-        // Keep the current UI state if polling fails temporarily.
+        // Keep current UI state on temporary polling failure.
       }
     }, 5000);
 

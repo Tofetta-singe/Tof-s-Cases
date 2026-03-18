@@ -4,14 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 const BASIC_REVEAL_SOUND = "/sound_ui_item_drop_basic.wav";
 const LEGENDARY_REVEAL_SOUND = "/sound_ui_item_reveal5_legendary.wav";
 const SCROLL_SOUND = "/sound_ui_csgo_ui_crate_item_scroll.wav";
-const WINDOW_RADIUS = 3;
+const WINDOW_OFFSETS = [-2, -1, 0, 1, 2, 3];
 
 function currency(value) {
-  return `${Number(value || 0).toFixed(2)} \u20ac`;
-}
-
-function isHighValueRarity(rarityName = "") {
-  return rarityName === "Covert" || rarityName === "Special Rare";
+  return `${Number(value || 0).toFixed(2)}\u20ac`;
 }
 
 function playAudio(audioRef, src) {
@@ -25,54 +21,68 @@ function playAudio(audioRef, src) {
   audioRef.current.play().catch(() => {});
 }
 
-function getWindowItems(items = [], centerIndex = 0) {
-  const output = [];
-
-  for (let offset = -WINDOW_RADIUS; offset <= WINDOW_RADIUS; offset += 1) {
-    output.push(items[centerIndex + offset] || null);
-  }
-
-  return output;
+function isLegendary(rarityName = "") {
+  return rarityName === "Covert" || rarityName === "Special Rare";
 }
 
-export function DropReveal({ opening, onRevealEnd }) {
+function getVisibleItems(items = [], cursorIndex = 0) {
+  return WINDOW_OFFSETS.map((offset) => items[cursorIndex + offset] || null);
+}
+
+function rarityShadow(rarityName = "") {
+  if (rarityName === "Special Rare") {
+    return "0 0 30px rgba(232, 198, 79, 0.35)";
+  }
+
+  if (rarityName === "Covert") {
+    return "0 0 26px rgba(226, 83, 83, 0.28)";
+  }
+
+  return "none";
+}
+
+export function DropReveal({ opening, busy, onRevealEnd, onSellReward, onReroll }) {
   const [phase, setPhase] = useState("idle");
   const [cursorIndex, setCursorIndex] = useState(0);
   const scrollAudioRef = useRef(null);
   const revealAudioRef = useRef(null);
 
+  const reward = opening?.reward || null;
+  const rewardRarityColor = reward?.rarity?.color || "#6b7280";
+  const rewardTitleParts = useMemo(() => {
+    if (!reward?.name) {
+      return { weapon: "", skin: "" };
+    }
+
+    const [weapon, skin] = reward.name.split(" | ");
+    return {
+      weapon: weapon || reward.name,
+      skin: skin || ""
+    };
+  }, [reward?.name]);
+
   const winnerIndex = opening?.reel?.winnerIndex ?? 0;
   const visibleItems = useMemo(
-    () => getWindowItems(opening?.reel?.items, cursorIndex),
+    () => getVisibleItems(opening?.reel?.items, cursorIndex),
     [opening?.reel?.items, cursorIndex]
   );
 
   useEffect(() => {
-    if (!opening?.reward) {
+    if (!reward) {
       return undefined;
     }
 
-    if (!opening.reel?.items?.length) {
+    if (!opening?.reel?.items?.length) {
       setPhase("settled");
-      const timeout = window.setTimeout(() => {
-        playAudio(
-          revealAudioRef,
-          isHighValueRarity(opening.reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND
-        );
-        onRevealEnd?.();
-      }, 250);
-
-      return () => {
-        window.clearTimeout(timeout);
-      };
+      return undefined;
     }
 
     setPhase("spinning");
-    setCursorIndex(0);
+    setCursorIndex(2);
 
-    const steps = Math.max(winnerIndex, 1);
-    const stepDelay = Math.max(70, Math.floor((opening.reel.durationMs || 5000) / steps));
-    let currentIndex = 0;
+    const steps = Math.max(winnerIndex - 2, 1);
+    const stepDelay = Math.max(75, Math.floor((opening.reel.durationMs || 5000) / steps));
+    let currentIndex = 2;
 
     const interval = window.setInterval(() => {
       currentIndex += 1;
@@ -84,7 +94,7 @@ export function DropReveal({ opening, onRevealEnd }) {
         setPhase("settled");
         playAudio(
           revealAudioRef,
-          isHighValueRarity(opening.reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND
+          isLegendary(reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND
         );
         onRevealEnd?.();
       }
@@ -93,77 +103,80 @@ export function DropReveal({ opening, onRevealEnd }) {
     return () => {
       window.clearInterval(interval);
     };
-  }, [opening, onRevealEnd, winnerIndex]);
+  }, [opening, onRevealEnd, reward, winnerIndex]);
 
   return (
     <AnimatePresence>
-      {opening?.reward ? (
-        <motion.div
-          key={opening.revealId || opening.reward.itemId}
-          initial={{ opacity: 0, y: 18, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+      {reward ? (
+        <motion.section
+          key={opening?.revealId || reward.itemId}
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          className="rounded-[32px] border border-amber-400/25 bg-gradient-to-br from-amber-400/12 via-black/20 to-sky-400/10 p-6 shadow-neon"
+          className="cs-panel rounded-[18px] px-5 py-5 md:px-6"
         >
-          <p className="text-xs uppercase tracking-[0.32em] text-amber-300">Case Reveal</p>
-          {opening.reel ? (
-            <div className="mt-5 overflow-hidden rounded-[28px] border border-white/10 bg-black/30 px-4 py-5">
-              <div className="relative grid grid-cols-7 gap-3">
-                <div className="pointer-events-none absolute left-1/2 top-0 z-10 h-full w-[3px] -translate-x-1/2 bg-amber-300 shadow-[0_0_24px_rgba(245,196,81,0.95)]" />
-                {visibleItems.map((item, index) => {
-                  const isCenter = index === WINDOW_RADIUS;
-                  const isDanger = item && isHighValueRarity(item.rarity?.name);
+          <div className="text-center">
+            <h2 className="text-[28px] font-bold leading-tight text-white md:text-[34px]">
+              {rewardTitleParts.weapon}
+              {rewardTitleParts.skin ? (
+                <>
+                  {" | "}
+                  <span style={{ color: rewardRarityColor }}>{rewardTitleParts.skin}</span>
+                </>
+              ) : null}
+              <span className="text-slate-300"> ({reward.wear})</span>
+            </h2>
+          </div>
 
-                  return (
-                    <div
-                      key={item?.itemId || `ghost-${index}`}
-                      className={`min-h-[150px] rounded-3xl border p-3 transition-all duration-100 ${
-                        isCenter
-                          ? "scale-[1.03] border-amber-300/60 bg-white/[0.08]"
-                          : "border-white/8 bg-white/[0.04]"
-                      } ${
-                        phase === "spinning" && isDanger && Math.abs(index - WINDOW_RADIUS) <= 1
-                          ? "shadow-[0_0_28px_rgba(245,196,81,0.35)]"
-                          : ""
-                      }`}
-                    >
-                      {item ? (
-                        <>
-                          <img src={item.image} alt={item.name} className="mx-auto h-16 w-16 object-contain" />
-                          <p className="mt-3 line-clamp-2 text-xs text-white">{item.name}</p>
-                          <p className="mt-1 text-[11px]" style={{ color: item.rarity.color }}>
-                            {item.rarity.name}
-                          </p>
-                        </>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-4 flex flex-col gap-5 md:flex-row md:items-center">
-            <img
-              src={opening.reward.image}
-              alt={opening.reward.name}
-              className="h-32 w-32 rounded-3xl border border-white/8 bg-black/20 object-contain p-3"
-            />
-            <div className="flex-1">
-              <h3 className="text-2xl font-semibold text-white">{opening.reward.name}</h3>
-              <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-300">
-                <span>Float {opening.reward.float.toFixed(4)}</span>
-                <span>{opening.reward.wear}</span>
-                <span>Pattern #{opening.reward.patternSeed}</span>
-                <span>{opening.reward.patternName}</span>
-                <span style={{ color: opening.reward.rarity.color }}>{opening.reward.rarity.name}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-semibold text-white">{currency(opening.reward.price)}</p>
-              <p className="text-sm text-slate-400">Revente {currency(opening.reward.sellPrice)}</p>
+          <div className="mt-4 overflow-hidden rounded-[6px] border border-white/12 bg-[rgba(90,92,97,0.55)] p-3">
+            <div className="relative grid grid-cols-6 gap-3">
+              <div className="pointer-events-none absolute left-1/2 top-0 z-20 h-full w-[4px] -translate-x-1/2 bg-[#ead95f]" />
+              {visibleItems.map((item, index) => (
+                <div
+                  key={item?.itemId || `placeholder-${index}`}
+                  className="relative h-[200px] overflow-hidden rounded-[2px] border border-black/25 bg-[linear-gradient(180deg,rgba(120,118,120,0.7)_0%,rgba(100,100,106,0.78)_70%,rgba(76,78,84,0.95)_100%)]"
+                  style={{
+                    boxShadow:
+                      phase === "spinning" && item ? rarityShadow(item.rarity?.name) : "none"
+                  }}
+                >
+                  {item ? (
+                    <>
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="mx-auto mt-5 h-32 w-32 object-contain drop-shadow-[0_18px_24px_rgba(0,0,0,0.45)]"
+                      />
+                      <div
+                        className="absolute bottom-0 left-0 h-[4px] w-full"
+                        style={{ backgroundColor: item.rarity?.color || "#6b7280" }}
+                      />
+                    </>
+                  ) : null}
+                </div>
+              ))}
             </div>
           </div>
-        </motion.div>
+
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => onSellReward?.(reward.itemId)}
+              disabled={busy}
+              className="rounded-[10px] border border-[#4fb64d] bg-[linear-gradient(180deg,#20471e_0%,#183517_100%)] px-6 py-2 text-lg font-semibold text-[#88ff7b] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
+            >
+              Sell for {currency(reward.sellPrice)}
+            </button>
+            <button
+              type="button"
+              onClick={() => onReroll?.(reward.crateId)}
+              disabled={busy}
+              className="rounded-[10px] border border-[#3e8fd3] bg-[linear-gradient(180deg,#3d4c59_0%,#32404e_100%)] px-8 py-2 text-lg font-semibold text-[#d9e5ef] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] disabled:opacity-50"
+            >
+              Reroll
+            </button>
+          </div>
+        </motion.section>
       ) : null}
     </AnimatePresence>
   );
