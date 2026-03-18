@@ -6,6 +6,9 @@
 
 :root {
   color-scheme: dark;
+  --fx-gold: rgba(234, 217, 95, 0.48);
+  --fx-blue: rgba(114, 177, 255, 0.24);
+  --fx-panel-edge: rgba(255, 255, 255, 0.12);
 }
 
 html {
@@ -37,6 +40,17 @@ body::before {
   opacity: 0.55;
 }
 
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 225, 135, 0.08), transparent 22%),
+    radial-gradient(circle at 10% 80%, rgba(108, 164, 255, 0.08), transparent 24%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 #root {
   position: relative;
   z-index: 1;
@@ -47,11 +61,84 @@ body::before {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 18px 30px rgba(0, 0, 0, 0.25);
+  position: relative;
+  isolation: isolate;
+}
+
+.cs-panel::before,
+.cs-top-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(130deg, rgba(255, 255, 255, 0.12), transparent 20%),
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.08), transparent 50%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.cs-panel::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: linear-gradient(180deg, var(--fx-panel-edge), transparent 35%) border-box;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .cs-top-box {
   background: linear-gradient(180deg, rgba(91, 96, 103, 0.96) 0%, rgba(73, 78, 85, 0.96) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  isolation: isolate;
+}
+
+.fx-panel {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 44px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.fx-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.fx-card::before {
+  content: "";
+  position: absolute;
+  inset: -40% -10% auto;
+  height: 100px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: translateX(-120%) rotate(12deg);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+}
+
+.fx-card:hover::before {
+  transform: translateX(120%) rotate(12deg);
+}
+
+.fx-glow {
+  animation: fxPulse 3.8s ease-in-out infinite;
+}
+
+@keyframes fxPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0), 0 0 0 rgba(255, 214, 102, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(109, 170, 255, 0.15), 0 0 28px rgba(255, 214, 102, 0.08);
+  }
 }
 
 * {

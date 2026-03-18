@@ -56,43 +56,48 @@ function pickFromCasePool(caseId) {
   return randomItem(selectedBucket.skins);
 }
 
+function buildReelEntry(skin, index) {
+  return {
+    itemId: `${skin.itemId || skin.skinId || skin.id}-${index}`,
+    name: skin.name,
+    image: skin.image,
+    rarity: skin.rarity
+  };
+}
+
 function buildOpeningReel(caseId, reward, length = 46) {
   const reel = [];
   const winnerIndex = length - 4;
 
   for (let index = 0; index < length; index += 1) {
     const skin = index === winnerIndex ? reward : buildDrop(pickFromCasePool(caseId), caseId);
-    reel.push({
-      itemId: `${skin.itemId || skin.skinId}-${index}`,
-      name: skin.name,
-      image: skin.image,
-      rarity: skin.rarity
-    });
+    reel.push(buildReelEntry(skin, index));
   }
 
-  for (let offset = 1; offset <= 3; offset += 1) {
-    const targetIndex = winnerIndex - offset;
-    if (targetIndex <= 0) {
+  const suspenseCandidates = [
+    { offset: 1, rarity: "Covert", chance: 0.18 },
+    { offset: 2, rarity: "Classified", chance: 0.26 },
+    { offset: 3, rarity: "Restricted", chance: 0.34 }
+  ];
+  const caseData = caseId === "free-daily-case" ? null : getCaseById(caseId);
+
+  for (const candidate of suspenseCandidates) {
+    const targetIndex = winnerIndex - candidate.offset;
+    if (targetIndex <= 0 || Math.random() > candidate.chance) {
       continue;
     }
 
-    const suspenseRarity =
-      offset === 1 ? "Special Rare" : offset === 2 ? "Covert" : "Classified";
-    const caseData = getCaseById(caseId);
     const suspensePool =
       caseId === "free-daily-case"
         ? getFreeDailyPool().filter((item) => item.rarity?.name === "Mil-Spec")
-        : caseData?.skins.filter((item) => item.rarity?.name === suspenseRarity);
+        : caseData?.skins.filter((item) => item.rarity?.name === candidate.rarity);
 
-    if (suspensePool?.length) {
-      const skin = randomItem(suspensePool);
-      reel[targetIndex] = {
-        itemId: `${skin.id}-${targetIndex}`,
-        name: skin.name,
-        image: skin.image,
-        rarity: skin.rarity
-      };
+    if (!suspensePool?.length) {
+      continue;
     }
+
+    const skin = randomItem(suspensePool);
+    reel[targetIndex] = buildReelEntry(skin, targetIndex);
   }
 
   return {

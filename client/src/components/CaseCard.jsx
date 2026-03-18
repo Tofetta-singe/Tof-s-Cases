@@ -11,10 +11,11 @@ export function CaseCard({ item, onOpen, disabled }) {
       whileTap={{ scale: 0.985 }}
       onClick={() => onOpen(item)}
       disabled={disabled}
-      className="text-left disabled:cursor-not-allowed disabled:opacity-60"
+      className="fx-card text-left disabled:cursor-not-allowed disabled:opacity-60"
     >
-      <div className="overflow-hidden rounded-[2px] border border-black/25 bg-[rgba(164,164,168,0.72)] shadow-[0_8px_22px_rgba(0,0,0,0.22)]">
-        <div className="flex h-[148px] items-center justify-center bg-[linear-gradient(180deg,rgba(186,186,190,0.6)_0%,rgba(151,151,155,0.55)_100%)] p-3">
+      <div className="fx-glow overflow-hidden rounded-[2px] border border-black/25 bg-[rgba(164,164,168,0.72)] shadow-[0_8px_22px_rgba(0,0,0,0.22)] transition-transform duration-300">
+        <div className="relative flex h-[148px] items-center justify-center bg-[linear-gradient(180deg,rgba(186,186,190,0.6)_0%,rgba(151,151,155,0.55)_100%)] p-3">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.16),transparent_52%)]" />
           <img
             src={item.image}
             alt={item.name}
