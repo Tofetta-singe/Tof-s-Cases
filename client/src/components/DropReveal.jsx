@@ -53,9 +53,8 @@ export function DropReveal({
 }) {
   const [phase, setPhase] = useState("idle");
   const [cardWidth, setCardWidth] = useState(160);
-  const [trackOffset, setTrackOffset] = useState(0);
-  const [trackTransition, setTrackTransition] = useState("none");
   const viewportRef = useRef(null);
+  const trackRef = useRef(null);
   const scrollAudioRef = useRef(null);
   const revealAudioRef = useRef(null);
   const activeRevealIdRef = useRef("");
@@ -106,7 +105,7 @@ export function DropReveal({
     const revealId = opening?.revealId || reward?.itemId || "";
     const duration = opening?.reel?.durationMs || 5000;
 
-    if (!reward || !items.length || !viewportRef.current || !revealId) {
+    if (!reward || !items.length || !viewportRef.current || !trackRef.current || !revealId) {
       return undefined;
     }
 
@@ -118,6 +117,7 @@ export function DropReveal({
     setPhase("spinning");
 
     const viewportWidth = viewportRef.current.clientWidth;
+    const trackEl = trackRef.current;
     const step = cardWidth + GAP;
     const winnerCenter = winnerIndex * step + cardWidth / 2;
     const targetX = viewportWidth / 2 - winnerCenter;
@@ -132,38 +132,34 @@ export function DropReveal({
       window.clearInterval(scrollIntervalRef.current);
     }
 
-    setTrackTransition("none");
-    setTrackOffset(startX);
+    trackEl.style.transition = "none";
+    trackEl.style.transform = `translate3d(${startX}px, 0, 0)`;
 
-    const frameA = window.requestAnimationFrame(() => {
-      const frameB = window.requestAnimationFrame(() => {
-        setTrackTransition(`transform ${duration}ms cubic-bezier(0.06, 0.88, 0.18, 1)`);
-        setTrackOffset(targetX);
+    // Force layout so the browser commits the start position before animating.
+    void trackEl.offsetWidth;
 
-        scrollIntervalRef.current = window.setInterval(() => {
-          playAudio(scrollAudioRef, SCROLL_SOUND, volume);
-        }, 95);
+    trackEl.style.transition = `transform ${duration}ms cubic-bezier(0.06, 0.88, 0.18, 1)`;
+    trackEl.style.transform = `translate3d(${targetX}px, 0, 0)`;
 
-        finishTimeoutRef.current = window.setTimeout(() => {
-          if (scrollIntervalRef.current) {
-            window.clearInterval(scrollIntervalRef.current);
-          }
-          setPhase("settled");
-          playAudio(
-            revealAudioRef,
-            isLegendary(reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND,
-            volume
-          );
-          onRevealEnd?.();
-        }, duration);
-      });
+    scrollIntervalRef.current = window.setInterval(() => {
+      playAudio(scrollAudioRef, SCROLL_SOUND, volume);
+    }, 95);
 
-      finishTimeoutRef.current = frameB;
-    });
+    finishTimeoutRef.current = window.setTimeout(() => {
+      if (scrollIntervalRef.current) {
+        window.clearInterval(scrollIntervalRef.current);
+      }
+      setPhase("settled");
+      playAudio(
+        revealAudioRef,
+        isLegendary(reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND,
+        volume
+      );
+      onRevealEnd?.();
+    }, duration);
 
     return () => {
-      window.cancelAnimationFrame(frameA);
-      if (typeof finishTimeoutRef.current === "number") {
+      if (finishTimeoutRef.current) {
         window.clearTimeout(finishTimeoutRef.current);
       }
       if (scrollIntervalRef.current) {
@@ -210,12 +206,11 @@ export function DropReveal({
               <div className="pointer-events-none absolute left-1/2 top-0 z-30 h-full w-[4px] -translate-x-1/2 bg-[#ead95f] shadow-[0_0_20px_rgba(234,217,95,0.85)]" />
 
               <div
+                ref={trackRef}
                 className="flex will-change-transform"
                 style={{
                   width: `${trackWidth}px`,
-                  gap: `${GAP}px`,
-                  transform: `translateX(${trackOffset}px)`,
-                  transition: trackTransition
+                  gap: `${GAP}px`
                 }}
               >
                 {items.map((item, index) => {
