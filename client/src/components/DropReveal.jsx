@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, animate, motion, useMotionValue } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 const BASIC_REVEAL_SOUND = "/sound_ui_item_drop_basic.wav";
 const LEGENDARY_REVEAL_SOUND = "/sound_ui_item_reveal5_legendary.wav";
@@ -53,13 +53,14 @@ export function DropReveal({
 }) {
   const [phase, setPhase] = useState("idle");
   const [cardWidth, setCardWidth] = useState(160);
+  const [trackOffset, setTrackOffset] = useState(0);
+  const [trackTransition, setTrackTransition] = useState("none");
   const viewportRef = useRef(null);
   const scrollAudioRef = useRef(null);
   const revealAudioRef = useRef(null);
-  const tickIndexRef = useRef(0);
-  const animationRef = useRef(null);
   const activeRevealIdRef = useRef("");
-  const trackX = useMotionValue(0);
+  const finishTimeoutRef = useRef(null);
+  const scrollIntervalRef = useRef(null);
 
   const reward = opening?.reward || null;
   const items = opening?.reel?.items || [];
@@ -103,6 +104,7 @@ export function DropReveal({
 
   useEffect(() => {
     const revealId = opening?.revealId || reward?.itemId || "";
+    const duration = opening?.reel?.durationMs || 5000;
 
     if (!reward || !items.length || !viewportRef.current || !revealId) {
       return undefined;
@@ -113,49 +115,62 @@ export function DropReveal({
     }
 
     activeRevealIdRef.current = revealId;
-    animationRef.current?.stop?.();
     setPhase("spinning");
 
     const viewportWidth = viewportRef.current.clientWidth;
     const step = cardWidth + GAP;
     const winnerCenter = winnerIndex * step + cardWidth / 2;
     const targetX = viewportWidth / 2 - winnerCenter;
-    const startIndex = Math.max(2, Math.min(5, items.length - VISIBLE_CARDS));
+    const startIndex = Math.max(2, Math.min(5, Math.max(items.length - VISIBLE_CARDS, 2)));
     const startCenter = startIndex * step + cardWidth / 2;
     const startX = viewportWidth / 2 - startCenter;
 
-    tickIndexRef.current = startIndex;
-    trackX.set(startX);
+    if (finishTimeoutRef.current) {
+      window.clearTimeout(finishTimeoutRef.current);
+    }
+    if (scrollIntervalRef.current) {
+      window.clearInterval(scrollIntervalRef.current);
+    }
 
-    const unsubscribe = trackX.on("change", (latest) => {
-      const progress = (viewportWidth / 2 - latest - cardWidth / 2) / step;
-      const nextTick = Math.floor(progress);
+    setTrackTransition("none");
+    setTrackOffset(startX);
 
-      if (nextTick > tickIndexRef.current && nextTick < winnerIndex) {
-        tickIndexRef.current = nextTick;
-        playAudio(scrollAudioRef, SCROLL_SOUND, volume);
-      }
-    });
+    const frameA = window.requestAnimationFrame(() => {
+      const frameB = window.requestAnimationFrame(() => {
+        setTrackTransition(`transform ${duration}ms cubic-bezier(0.06, 0.88, 0.18, 1)`);
+        setTrackOffset(targetX);
 
-    animationRef.current = animate(trackX, targetX, {
-      duration: (opening.reel?.durationMs || 5000) / 1000,
-      ease: [0.05, 0.9, 0.15, 1],
-      onComplete: () => {
-        setPhase("settled");
-        playAudio(
-          revealAudioRef,
-          isLegendary(reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND,
-          volume
-        );
-        onRevealEnd?.();
-      }
+        scrollIntervalRef.current = window.setInterval(() => {
+          playAudio(scrollAudioRef, SCROLL_SOUND, volume);
+        }, 95);
+
+        finishTimeoutRef.current = window.setTimeout(() => {
+          if (scrollIntervalRef.current) {
+            window.clearInterval(scrollIntervalRef.current);
+          }
+          setPhase("settled");
+          playAudio(
+            revealAudioRef,
+            isLegendary(reward.rarity?.name) ? LEGENDARY_REVEAL_SOUND : BASIC_REVEAL_SOUND,
+            volume
+          );
+          onRevealEnd?.();
+        }, duration);
+      });
+
+      finishTimeoutRef.current = frameB;
     });
 
     return () => {
-      unsubscribe();
-      animationRef.current?.stop?.();
+      window.cancelAnimationFrame(frameA);
+      if (typeof finishTimeoutRef.current === "number") {
+        window.clearTimeout(finishTimeoutRef.current);
+      }
+      if (scrollIntervalRef.current) {
+        window.clearInterval(scrollIntervalRef.current);
+      }
     };
-  }, [opening?.revealId, reward, items, winnerIndex, opening?.reel?.durationMs, cardWidth, trackX, onRevealEnd, volume]);
+  }, [opening?.revealId, reward, items, winnerIndex, opening?.reel?.durationMs, cardWidth, onRevealEnd, volume]);
 
   const trackWidth = items.length ? items.length * cardWidth + Math.max(items.length - 1, 0) * GAP : 0;
 
@@ -194,12 +209,13 @@ export function DropReveal({
               <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-24 bg-[linear-gradient(270deg,rgba(58,61,67,0.92)_0%,rgba(58,61,67,0)_100%)]" />
               <div className="pointer-events-none absolute left-1/2 top-0 z-30 h-full w-[4px] -translate-x-1/2 bg-[#ead95f] shadow-[0_0_20px_rgba(234,217,95,0.85)]" />
 
-              <motion.div
+              <div
                 className="flex will-change-transform"
                 style={{
-                  x: trackX,
-                  width: trackWidth,
-                  gap: `${GAP}px`
+                  width: `${trackWidth}px`,
+                  gap: `${GAP}px`,
+                  transform: `translateX(${trackOffset}px)`,
+                  transition: trackTransition
                 }}
               >
                 {items.map((item, index) => {
@@ -230,7 +246,7 @@ export function DropReveal({
                     </div>
                   );
                 })}
-              </motion.div>
+              </div>
             </div>
           </div>
 
